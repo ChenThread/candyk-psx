@@ -4,6 +4,16 @@ This readme will need to be better fleshed-out.
 
 By the way, you will need a MIPS cross-compiler. This toolchain assumes that you use `mipsel-none-elf` as your target name, but if you don't use this you can always change the `CROSSPREFIX` variable.
 
+## Licences
+
+To be decided.
+
+### Exceptions
+
+The `dat/isolicence.*` files are required in order to make a bootable PlayStation disc, and cannot be replaced.
+
+`iso2raw` is of unknown copyright status.
+
 ## Quick notes for building a GCC toolchain
 
 TODO: actually go into depth into how this is done and provide scripts so people don't have to think.
