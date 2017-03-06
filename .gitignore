@@ -3,6 +3,9 @@
 *.a
 *.elf
 *.exe
+*.iso
+*.iso.bin
+*.iso.cue
 
 # Specific output
 bin/iso2raw
