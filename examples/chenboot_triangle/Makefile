@@ -10,6 +10,14 @@ TARGET_CC = $(CROSSPREFIX)gcc
 TARGET_CFLAGS = -g -O1 -msoft-float -mips1
 TARGET_LDFLAGS = -g -O1 -msoft-float -mips1 -Wl,-Ttext-segment=0x80010000 $(LIBS)
 ELF2PSX = ../../bin/elf2psx
+ISO2RAW = ../../bin/iso2raw
+MKISOFS = mkisofs
+
+triangle.iso.bin: triangle.iso
+	$(ISO2RAW) ../../dat/isolicence.pal triangle.iso
+
+triangle.iso: triangle.exe
+	$(MKISOFS) -o triangle.iso system.cnf triangle.exe
 
 triangle.exe: triangle.elf
 	$(ELF2PSX) -p triangle.elf triangle.exe
