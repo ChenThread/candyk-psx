@@ -1,0 +1,13 @@
+# Output
+*.o
+*.a
+*.elf
+*.exe
+
+# Specific output
+bin/iso2raw
+bin/elf2psx
+
+# VIM
+.*.sw?
+
