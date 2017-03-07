@@ -5,13 +5,11 @@ NATIVE_CC = $(CC)
 NATIVE_CFLAGS = -O1 -g
 NATIVE_LDFLAGS = -O1 -g
 TARGET_AR = $(CROSSPREFIX)ar
-TARGET_AS = $(CROSSPREFIX)as
 TARGET_CC = $(CROSSPREFIX)gcc
 TARGET_LD = $(CROSSPREFIX)ld
 TARGET_RANLIB = $(CROSSPREFIX)ranlib
-TARGET_CFLAGS = -O1 -g -msoft-float -mips1
-TARGET_LDFLAGS = -O1 -g -msoft-float -mips1
-TARGET_ASFLAGS = -g -msoft-float -mips1
+TARGET_CFLAGS = -flto -O2 -g -msoft-float -mips1 -Iinclude
+TARGET_LDFLAGS = -flto -O2 -g -msoft-float -mips1
 
 EXEPOST=
 OUTPUT_BINDIR = bin/
