@@ -4,10 +4,11 @@ SRCS = \
 	main.c
 
 LIBS = -L../../lib -lchenboot 
+INCLUDES = -I../../include
 
 CROSSPREFIX = mipsel-none-elf-
 TARGET_CC = $(CROSSPREFIX)gcc
-TARGET_CFLAGS = -g -O1 -msoft-float -mips1
+TARGET_CFLAGS = -g -O1 -msoft-float -mips1 $(INCLUDES)
 TARGET_LDFLAGS = -g -O1 -msoft-float -mips1 -Wl,-Ttext-segment=0x80010000 $(LIBS)
 ELF2PSX = ../../bin/elf2psx
 ISO2RAW = ../../bin/iso2raw

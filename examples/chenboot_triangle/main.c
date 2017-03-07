@@ -13,32 +13,34 @@ https://creativecommons.org/publicdomain/zero/1.0/
 #include <stdio.h>
 #include <errno.h>
 
+#include <psxregs.h>
+
 void gpu_write_gp0_command(uint32_t v) {
 	int i;
 
 	for(i = 0; i < 1000; i+=1) {
-		if(((*(volatile uint32_t *)0xBF801814) & (1<<26)) != 0) {
+		if((PSXREG_GPU_GPUSTAT & (1<<26)) != 0) {
 			break;
 		}
 	}
 
-	*(volatile uint32_t *)0xBF801810 = v;
+	PSXREG_GPU_GP0 = v;
 }
 
 void gpu_write_gp0_data(uint32_t v) {
 	int i;
 
 	for(i = 0; i < 1000; i+=1) {
-		if(((*(volatile uint32_t *)0xBF801814) & (1<<28)) != 0) {
+		if((PSXREG_GPU_GPUSTAT & (1<<28)) != 0) {
 			break;
 		}
 	}
 
-	*(volatile uint32_t *)0xBF801810 = v;
+	PSXREG_GPU_GP0 = v;
 }
 
 void gpu_write_gp1(uint32_t v) {
-	*(volatile uint32_t *)0xBF801814 = v;
+	PSXREG_GPU_GP1 = v;
 }
 
 int main(int argc, char *argv[])
