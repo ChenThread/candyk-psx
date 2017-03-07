@@ -14,6 +14,7 @@ https://creativecommons.org/publicdomain/zero/1.0/
 #include <errno.h>
 
 #include <psxregs.h>
+#include <chenboot.h>
 
 void gpu_write_gp0_command(uint32_t v) {
 	int i;
@@ -45,6 +46,14 @@ void gpu_write_gp1(uint32_t v) {
 
 int main(int argc, char *argv[])
 {
+	// Install ISR handler
+	chenboot_isr_disable();
+	PSXREG_I_MASK = 0x0000;
+	PSXREG_I_STAT = 0x0000;
+	chenboot_isr_install(chenboot_isr_default);
+	chenboot_isr_enable();
+	PSXREG_I_MASK = 0x0001;
+
 	// Reset GPU
 	gpu_write_gp1(0x00000000);
 

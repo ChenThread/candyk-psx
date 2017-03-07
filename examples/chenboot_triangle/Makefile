@@ -3,16 +3,22 @@
 SRCS = \
 	main.c
 
-LIBS = -L../../lib -lchenboot 
+LIBS = -nostdlib -L../../lib -lgcc -lc -lchenboot
 INCLUDES = -I../../include
 
 CROSSPREFIX = mipsel-none-elf-
 TARGET_CC = $(CROSSPREFIX)gcc
-TARGET_CFLAGS = -g -O1 -msoft-float -mips1 $(INCLUDES)
-TARGET_LDFLAGS = -g -O1 -msoft-float -mips1 -Wl,-Ttext-segment=0x80010000 $(LIBS)
+TARGET_CFLAGS = -g -flto -O2 -msoft-float -mips1 $(INCLUDES)
+TARGET_LDFLAGS = -g -flto -O2 -msoft-float -mips1 -Wl,-Ttext-segment=0x80010000 $(LIBS)
 ELF2PSX = ../../bin/elf2psx
 ISO2RAW = ../../bin/iso2raw
 MKISOFS = mkisofs
+RM_F = rm -f
+
+clean:
+	$(RM_F) triangle.elf
+
+all: triangle.iso.bin
 
 triangle.iso.bin: triangle.iso
 	$(ISO2RAW) ../../dat/isolicence.pal triangle.iso
