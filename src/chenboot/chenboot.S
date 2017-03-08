@@ -217,8 +217,6 @@ _start:
 	.end _start
 
 	.data
-	.ent __chenboot_isr_hook
 __chenboot_isr_hook:
 	.word chenboot_isr_default
-	.end __chenboot_isr_hook
 
