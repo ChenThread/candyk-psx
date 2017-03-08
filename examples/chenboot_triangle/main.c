@@ -13,10 +13,10 @@ https://creativecommons.org/publicdomain/zero/1.0/
 #include <stdio.h>
 #include <errno.h>
 
-#include <psxregs.h>
 #include <chenboot.h>
-
-#define PAIR16(x, y) (((x)&0xFFFF) | ((y)<<16))
+#include <psxdefs/gpu.h>
+#include <psxdefs/intc.h>
+#include <psxregs.h>
 
 volatile uint32_t vblank_counter = 0;
 
@@ -64,7 +64,7 @@ chenboot_exception_frame_t *isr_main(chenboot_exception_frame_t *sp)
 	int iflags = PSXREG_I_STAT;
 
 	// vblank handler
-	if((iflags & (1<<0)) != 0) {
+	if((iflags & INTC_VBLANK) != 0) {
 		vblank_counter += 1;
 	}
 
@@ -89,24 +89,30 @@ int main(int argc, char *argv[])
 	PSXREG_I_STAT = 0x0000;
 	chenboot_isr_install(isr_main);
 	chenboot_isr_enable();
-	PSXREG_I_MASK = 0x0001;
+	PSXREG_I_MASK = (0
+		| INTC_VBLANK
+	);
 
 	// Reset GPU
-	gpu_write_gp1(0x00000000);
+	gpu_write_gp1(GP1_RESET_GPU());
 
 	// Set video mode
-	gpu_write_gp1(0x08000009); // PAL, 320x240 base, 15bpp, progressive
-	gpu_write_gp1(0x06000000 | (0x260) | ((0x260+320*8)<<12)); // Xrange
-	gpu_write_gp1(0x07000000 | (0xA3-200/2) | ((0xA3+200/2)<<10)); // Yrange
-	gpu_write_gp1(0x05000000 | (0) | ((vidy)<<10)); // Output coordinates
+	gpu_write_gp1(GP1_DISPLAY_MODE(
+		GPU_DISPMODE_W_320,
+		GPU_DISPMODE_H_240P,
+		GPU_DISPMODE_BPP_15,
+		GPU_DISPMODE_STD_PAL));
+	gpu_write_gp1(GP1_DISPLAY_RANGE_X(0x260, 0x260 + 320*8));
+	gpu_write_gp1(GP1_DISPLAY_RANGE_Y(0xA3 - 200/2, 0xA3 + 200/2));
+	gpu_write_gp1(GP1_DISPLAY_START(0, vidy));
 
 	// Clear screen to colour
-	gpu_write_gp0_command(0x02402000);
-	gpu_write_gp0_data(PAIR16(  0,   0+vidy));
-	gpu_write_gp0_data(PAIR16(320, 200+vidy));
+	gpu_write_gp0_command(GP0_MEM_FILL(GPU_RGB8(0x00, 0x20, 0x40)));
+	gpu_write_gp0_data(GPU_BOX_OFFS(  0,   0+vidy));
+	gpu_write_gp0_data(GPU_BOX_SIZE(320, 200+vidy));
 
 	// Enable display
-	gpu_write_gp1(0x03000000); // display on
+	gpu_write_gp1(GP1_DISPLAY_ENABLE());
 
 	// Reset vblank counter
 	vblank_counter = 0;
@@ -123,23 +129,24 @@ int main(int argc, char *argv[])
 		vidy = 200-vidy;
 
 		// Set rendering attribs
+		// TODO: add the attribute wrappers, then use them
 		gpu_write_gp0_command(0xE1000600); // Dither, allow draw to display, 4bpp tex
 		gpu_write_gp0_command(0xE2000000); // Tex window setting (don't care)
-		gpu_write_gp0_command(0xE3000000 | (0) | ((0+vidy)<<10)); // Min X/Y
-		gpu_write_gp0_command(0xE4000000 | (320-1) | (((200-1)+vidy)<<10)); // Max X/Y
-		gpu_write_gp0_command(0xE5000000 | (320/2) | (((200/2)+vidy)<<11)); // Drawing offset
+		gpu_write_gp0_command(GP0_ATTR_DRAW_RANGE_MIN(0, 0+vidy));
+		gpu_write_gp0_command(GP0_ATTR_DRAW_RANGE_MAX(320-1, (200-1)+vidy));
+		gpu_write_gp0_command(GP0_ATTR_DRAW_OFFSET(320/2, (200/2)+vidy));
 		gpu_write_gp0_command(0xE6000000); // Mask bit (draw always)
 
 		// Clear screen to colour
-		gpu_write_gp0_command(0x02402000);
-		gpu_write_gp0_data(PAIR16(  0,   0+vidy));
-		gpu_write_gp0_data(PAIR16(320, 200));
+		gpu_write_gp0_command(GP0_MEM_FILL(GPU_RGB8(0x00, 0x20, 0x40)));
+		gpu_write_gp0_data(GPU_BOX_OFFS(  0,   0+vidy));
+		gpu_write_gp0_data(GPU_BOX_SIZE(320, 200));
 
 		// Draw a triangle
-		gpu_write_gp0_command(0x200080FF);
-		gpu_write_gp0_data(PAIR16(( 60)+x, (-50)+y));
-		gpu_write_gp0_data(PAIR16((  0)+x, ( 70)+y));
-		gpu_write_gp0_data(PAIR16((-60)+x, (-50)+y));
+		gpu_write_gp0_command(GP0_TRI_FLAT(GPU_RGB8(0xFF, 0x80, 0x00)));
+		gpu_write_gp0_data(GPU_VERTEX(( 60)+x, (-50)+y));
+		gpu_write_gp0_data(GPU_VERTEX((  0)+x, ( 70)+y));
+		gpu_write_gp0_data(GPU_VERTEX((-60)+x, (-50)+y));
 
 		//
 		// PHYSICS
@@ -170,7 +177,7 @@ int main(int argc, char *argv[])
 		expected_vblank_counter += vblanks;
 
 		// Swap buffers
-		gpu_write_gp1(0x05000000 | (0) | ((vidy)<<10)); // Output coordinates
+		gpu_write_gp1(GP1_DISPLAY_START(0, vidy));
 	}
 
 	return 0;
