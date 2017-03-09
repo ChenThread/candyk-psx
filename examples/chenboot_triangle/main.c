@@ -19,6 +19,7 @@ https://creativecommons.org/publicdomain/zero/1.0/
 #include <psxregs.h>
 
 volatile uint32_t vblank_counter = 0;
+volatile int out_vidy = 0;
 
 void gpu_write_gp0_command(uint32_t v)
 {
@@ -66,6 +67,7 @@ chenboot_exception_frame_t *isr_main(chenboot_exception_frame_t *sp)
 	// vblank handler
 	if((iflags & INTC_VBLANK) != 0) {
 		vblank_counter += 1;
+		gpu_write_gp1(GP1_DISPLAY_START(0, out_vidy));
 	}
 
 	// Acknowledge all interrupts
@@ -109,7 +111,7 @@ int main(int argc, char *argv[])
 	// Clear screen to colour
 	gpu_write_gp0_command(GP0_MEM_FILL(GPU_RGB8(0x00, 0x20, 0x40)));
 	gpu_write_gp0_data(GPU_BOX_OFFS(  0,   0+vidy));
-	gpu_write_gp0_data(GPU_BOX_SIZE(320, 200+vidy));
+	gpu_write_gp0_data(GPU_BOX_SIZE(320, 200));
 
 	// Enable display
 	gpu_write_gp1(GP1_DISPLAY_ENABLE());
@@ -129,13 +131,17 @@ int main(int argc, char *argv[])
 		vidy = 200-vidy;
 
 		// Set rendering attribs
-		// TODO: add the attribute wrappers, then use them
-		gpu_write_gp0_command(0xE1000600); // Dither, allow draw to display, 4bpp tex
-		gpu_write_gp0_command(0xE2000000); // Tex window setting (don't care)
+		gpu_write_gp0_command(GP0_ATTR_TEXPAGE(
+			0,
+			0,
+			GPU_TEXPAGE_BLEND_HALF,
+			GPU_TEXPAGE_TEXBPP_4,
+			GPU_TEXPAGE_DITHER | GPU_TEXPAGE_DRAWTODISPLAY));
+		gpu_write_gp0_command(GP0_ATTR_TEXWINDOW(0,0,0,0));
 		gpu_write_gp0_command(GP0_ATTR_DRAW_RANGE_MIN(0, 0+vidy));
 		gpu_write_gp0_command(GP0_ATTR_DRAW_RANGE_MAX(320-1, (200-1)+vidy));
 		gpu_write_gp0_command(GP0_ATTR_DRAW_OFFSET(320/2, (200/2)+vidy));
-		gpu_write_gp0_command(0xE6000000); // Mask bit (draw always)
+		gpu_write_gp0_command(GP0_ATTR_MASKBIT(0));
 
 		// Clear screen to colour
 		gpu_write_gp0_command(GP0_MEM_FILL(GPU_RGB8(0x00, 0x20, 0x40)));
@@ -170,14 +176,13 @@ int main(int argc, char *argv[])
 			}
 		}
 
-		// Wait for vblank
+		out_vidy = vidy;
+
+		// Wait for at least one vblank
 		do {
 			vblanks = vblank_counter - expected_vblank_counter;
 		} while(vblanks == 0);
 		expected_vblank_counter += vblanks;
-
-		// Swap buffers
-		gpu_write_gp1(GP1_DISPLAY_START(0, vidy));
 	}
 
 	return 0;
