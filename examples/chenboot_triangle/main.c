@@ -20,6 +20,7 @@ https://creativecommons.org/publicdomain/zero/1.0/
 
 volatile uint32_t vblank_counter = 0;
 volatile int out_vidy = 0;
+volatile int real_out_vidy = 0;
 
 void gpu_write_gp0_command(uint32_t v)
 {
@@ -68,6 +69,7 @@ chenboot_exception_frame_t *isr_main(chenboot_exception_frame_t *sp)
 	if((iflags & INTC_VBLANK) != 0) {
 		vblank_counter += 1;
 		gpu_write_gp1(GP1_DISPLAY_START(0, out_vidy));
+		real_out_vidy = out_vidy;
 	}
 
 	// Acknowledge all interrupts
@@ -180,8 +182,8 @@ int main(int argc, char *argv[])
 
 		// Wait for at least one vblank
 		do {
-			vblanks = vblank_counter - expected_vblank_counter;
-		} while(vblanks == 0);
+		} while(out_vidy != real_out_vidy);
+		vblanks = vblank_counter - expected_vblank_counter;
 		expected_vblank_counter += vblanks;
 	}
 

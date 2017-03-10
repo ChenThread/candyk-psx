@@ -1,6 +1,6 @@
 // Data
 #define GPU_VERTEX(x, y) (((x)&0xFFFF) | ((y)<<16))
-#define GPU_TEXCOORD_UPPER(x, y, upper) (((x)&0xFF) | (((y)&0xFF)<<16) | ((upper)<<16))
+#define GPU_TEXCOORD_UPPER(x, y, upper) (((x)&0xFF) | (((y)&0xFF)<<8) | ((upper)<<16))
 #define GPU_TEXCOORD(x, y) GPU_TEXCOORD_UPPER((x), (y), 0)
 #define GPU_TEXCOORD_TEXPAGE(x, y, xbase, ybase, blend, bpp) \
 	GPU_TEXCOORD_UPPER((x), (y), ( \
