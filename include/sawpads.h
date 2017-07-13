@@ -1,7 +1,4 @@
 /*
-FIXME: need to talk to asie about a release of this,
-if you can read this and you aren't me, I've fucked up --GM
-
 sawpads: Actually Tested* Joypad Code
 Copyright (C) Chen Thread, 2017, licensed under Creative Commons Zero:
 https://creativecommons.org/publicdomain/zero/1.0/
