@@ -30,14 +30,6 @@ static int midi_divisions = 0;
 static uint32_t midi_touch_counter = 0;
 static uint32_t midi_tempo = 500000; // 120 BPM
 
-// att = 127-vel
-// 2^-(att/32)
-static const uint32_t midi_velcurve[32] = {
-	0x2000, 0x1f50, 0x1ea5, 0x1dfd, 0x1d58, 0x1cb7, 0x1c1a, 0x1b7f,
-	0x1ae9, 0x1a55, 0x19c5, 0x1937, 0x18ad, 0x1826, 0x17a1, 0x171f,
-	0x16a1, 0x1624, 0x15ab, 0x1534, 0x14c0, 0x144e, 0x13df, 0x1372,
-	0x1307, 0x129f, 0x1238, 0x11d5, 0x1173, 0x1113, 0x10b5, 0x105a,
-};
 static uint32_t midi_read_u8(uint8_t const** ptr)
 {
 	uint32_t v = 0;
@@ -101,6 +93,7 @@ void orelei_midi_reset(void)
 
 	for(int i = 0; i < ORELEI_MIDI_MASTER_COUNT; i++) {
 		struct midi_master *M = &midi_masters[i];
+		M->prg = 0;
 	}
 
 	for(int i = 0; i < midi_track_count; i++) {
@@ -111,10 +104,8 @@ void orelei_midi_reset(void)
 	}
 }
 
-static void midi_note_on(int ch, int note, int vel)
+static void midi_note_on(int ch, int note, int vel, void (*f_play_note)(int hwch, int ch, int prg, int note, int vel))
 {
-	if(ch == 9) { return; } // TODO: drums
-
 	int slave_idx = -1;
 
 	// Do we already have this as a slave?
@@ -159,24 +150,13 @@ static void midi_note_on(int ch, int note, int vel)
 	S->note = note;
 	S->last_touched = ++midi_touch_counter;
 
-	int att = 127-vel;
-	att += 16;
-	int vol = midi_velcurve[att&0x1F]>>((att>>5));
-	int voll = (vol * (0x1000-(ch-8)*0x180))>>12;
-	int volr = (vol * (0x1000+(ch-8)*0x180))>>12;
-	if(voll >= 0x1000) { voll = 0x1000; }
-	if(volr >= 0x1000) { volr = 0x1000; }
-	ASSERT(note >= 0x00 && note <= 0x7F);
-	//uint32_t adsr = 0x000000FF;
-	uint32_t adsr = 0xD02A00EC;
-	orelei_play_note(slave_idx, 0x01000, adsr, voll, volr,
-		orelei_note_to_pitch(note, 8+1, 0x2934));
+	// Play note
+	struct midi_master *M = &midi_masters[ch];
+	f_play_note(slave_idx, ch, M->prg, note, vel);
 }
 
 static void midi_note_off(int ch, int note, int vel)
 {
-	if(ch == 9) { return; } // TODO: drums
-
 	for(int i = 0; i < SPU_CHANNEL_COUNT; i++) {
 		struct midi_slave *S = &midi_slaves[i];
 		if(S->ch == ch && S->note == note) {
@@ -187,7 +167,8 @@ static void midi_note_off(int ch, int note, int vel)
 	}
 }
 
-void orelei_midi_update(int32_t time_advanced_us)
+static int32_t midi_tick_accum = 0;
+void orelei_midi_update(int32_t time_advanced_us, void (*f_play_note)(int hwch, int ch, int prg, int note, int vel))
 {
 	/*
 	Divisions = ticks per 1/4-note
@@ -195,8 +176,11 @@ void orelei_midi_update(int32_t time_advanced_us)
 	*/
 	int64_t tickbase = midi_divisions;
 	tickbase *= time_advanced_us;
-	tickbase += midi_tempo/2;
+	//tickbase += midi_tempo/2;
+	midi_tick_accum += (tickbase % midi_tempo);
 	tickbase /= midi_tempo;
+	tickbase += midi_tick_accum / midi_tempo;
+	midi_tick_accum %= midi_tempo;
 	int32_t ticks_advanced = tickbase;
 
 	for(int i = 0; i < midi_track_count; i++) {
@@ -204,10 +188,6 @@ void orelei_midi_update(int32_t time_advanced_us)
 		uint8_t const** mpp = &T->mptr;
 
 		T->ticks_waiting -= ticks_advanced;
-		*(volatile const void **)0x801FFFE0 = T->mptr_beg;
-		*(volatile const void **)0x801FFFE4 = T->mptr_end;
-		*(volatile const void **)0x801FFFE8 = T->mptr;
-		*(volatile uint32_t *)0x801FFFEC = T->ticks_waiting;
 		while(T->ticks_waiting <= 0) {
 			if(T->mptr >= T->mptr_end || T->mptr < T->mptr_beg) {
 				break;
@@ -223,6 +203,8 @@ void orelei_midi_update(int32_t time_advanced_us)
 			}
 			//*(volatile uint32_t *)0x801FFFF0 = v0;
 
+			struct midi_master *M = &midi_masters[v0&0xF];
+
 			uint8_t v2, v3;
 			switch(v0>>4) {
 				case 0x8: // Note off
@@ -236,7 +218,7 @@ void orelei_midi_update(int32_t time_advanced_us)
 						// I DIDN'T MAKE THIS STUPID THING.
 						midi_note_off(v0&0xF, v1, 0x00);
 					} else {
-						midi_note_on(v0&0xF, v1, v2);
+						midi_note_on(v0&0xF, v1, v2, f_play_note);
 					}
 					break;
 				case 0xA: // Key aftertouch
@@ -246,6 +228,7 @@ void orelei_midi_update(int32_t time_advanced_us)
 					v2 = midi_read_u8(mpp);
 					break;
 				case 0xC: // Program change
+					M->prg = v1 & 0x7F;
 					break;
 				case 0xD: // Instrument aftertouch
 					break;

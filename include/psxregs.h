@@ -173,6 +173,7 @@
 #define PSXREG_SPU_EFFECT_vWALL   (*(volatile uint16_t *)(PSX_IOBASE + 0x1DCE))
 #define PSXREG_SPU_EFFECT_vAPF1   (*(volatile uint16_t *)(PSX_IOBASE + 0x1DD0))
 #define PSXREG_SPU_EFFECT_vAPF2   (*(volatile uint16_t *)(PSX_IOBASE + 0x1DD2))
+
 #define PSXREG_SPU_EFFECT_mSAME   (*(volatile uint32_t *)(PSX_IOBASE + 0x1DD4))
 #define PSXREG_SPU_EFFECT_mCOMB1  (*(volatile uint32_t *)(PSX_IOBASE + 0x1DD8))
 #define PSXREG_SPU_EFFECT_mCOMB2  (*(volatile uint32_t *)(PSX_IOBASE + 0x1DDC))
@@ -184,6 +185,30 @@
 #define PSXREG_SPU_EFFECT_mAPF1   (*(volatile uint32_t *)(PSX_IOBASE + 0x1DF4))
 #define PSXREG_SPU_EFFECT_mAPF2   (*(volatile uint32_t *)(PSX_IOBASE + 0x1DF8))
 #define PSXREG_SPU_EFFECT_vIN     (*(volatile uint32_t *)(PSX_IOBASE + 0x1DFC))
+
+#define PSXREG_SPU_EFFECT_mLSAME   (*(volatile uint16_t *)(PSX_IOBASE + 0x1DD4))
+#define PSXREG_SPU_EFFECT_mLCOMB1  (*(volatile uint16_t *)(PSX_IOBASE + 0x1DD8))
+#define PSXREG_SPU_EFFECT_mLCOMB2  (*(volatile uint16_t *)(PSX_IOBASE + 0x1DDC))
+#define PSXREG_SPU_EFFECT_dLSAME   (*(volatile uint16_t *)(PSX_IOBASE + 0x1DE0))
+#define PSXREG_SPU_EFFECT_mLDIFF   (*(volatile uint16_t *)(PSX_IOBASE + 0x1DE4))
+#define PSXREG_SPU_EFFECT_mLCOMB3  (*(volatile uint16_t *)(PSX_IOBASE + 0x1DE8))
+#define PSXREG_SPU_EFFECT_mLCOMB4  (*(volatile uint16_t *)(PSX_IOBASE + 0x1DEC))
+#define PSXREG_SPU_EFFECT_dLDIFF   (*(volatile uint16_t *)(PSX_IOBASE + 0x1DF0))
+#define PSXREG_SPU_EFFECT_mLAPF1   (*(volatile uint16_t *)(PSX_IOBASE + 0x1DF4))
+#define PSXREG_SPU_EFFECT_mLAPF2   (*(volatile uint16_t *)(PSX_IOBASE + 0x1DF8))
+#define PSXREG_SPU_EFFECT_vLIN     (*(volatile uint16_t *)(PSX_IOBASE + 0x1DFC))
+#define PSXREG_SPU_EFFECT_mRSAME   (*(volatile uint16_t *)(PSX_IOBASE + 0x1DD6))
+#define PSXREG_SPU_EFFECT_mRCOMB1  (*(volatile uint16_t *)(PSX_IOBASE + 0x1DDA))
+#define PSXREG_SPU_EFFECT_mRCOMB2  (*(volatile uint16_t *)(PSX_IOBASE + 0x1DDE))
+#define PSXREG_SPU_EFFECT_dRSAME   (*(volatile uint16_t *)(PSX_IOBASE + 0x1DE2))
+#define PSXREG_SPU_EFFECT_mRDIFF   (*(volatile uint16_t *)(PSX_IOBASE + 0x1DE6))
+#define PSXREG_SPU_EFFECT_mRCOMB3  (*(volatile uint16_t *)(PSX_IOBASE + 0x1DEA))
+#define PSXREG_SPU_EFFECT_mRCOMB4  (*(volatile uint16_t *)(PSX_IOBASE + 0x1DEE))
+#define PSXREG_SPU_EFFECT_dRDIFF   (*(volatile uint16_t *)(PSX_IOBASE + 0x1DF2))
+#define PSXREG_SPU_EFFECT_mRAPF1   (*(volatile uint16_t *)(PSX_IOBASE + 0x1DF6))
+#define PSXREG_SPU_EFFECT_mRAPF2   (*(volatile uint16_t *)(PSX_IOBASE + 0x1DFA))
+#define PSXREG_SPU_EFFECT_vRIN     (*(volatile uint16_t *)(PSX_IOBASE + 0x1DFE))
+
 
 #define PSXREG_SPU_n_VOLX(n) (*(volatile uint32_t *)(PSX_IOBASE + 0x1E00 + (n)*0x04))
 

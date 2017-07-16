@@ -93,6 +93,62 @@ void orelei_sram_write_blocking(int sram_addr, void const* data, size_t len)
 	orelei_set_transfer_mode(SPU_TRANSFER_MODE_STOP);
 }
 
+void orelei_pack_spu(uint8_t *outbuf, const int16_t *inbuf, int16_t *pred1, int16_t *pred2, int blocks, int loopbeg, int loopend, bool fade_on_loop)
+{
+	// TODO: non-format-1 blocks
+	for(int ctr = 0; ctr < blocks; ctr++) {
+		const int16_t *iptr = inbuf+28*ctr;
+		uint8_t *optr = outbuf+16*ctr;
+
+		static int32_t unfilter_buf[28];
+
+		// Perform delta encoding
+		int32_t s1 = *pred1;
+		int32_t s2 = *pred2;
+		int32_t best_power = 0;
+		for(int i = 0; i < 28; i++) {
+			unfilter_buf[i] = iptr[i] - s1;
+			s2 = s1;
+			s1 = iptr[i];
+			int aval = unfilter_buf[i];
+			while((aval < ((-17<<best_power)>>1) || aval >= ((15<<best_power)>>1)) && best_power < 12) {
+				best_power += 1;
+			}
+		}
+
+		// Pack
+		optr[0] = 0x10 | (12-best_power);
+		optr[1] = 0x00;
+		if(ctr == loopbeg) {
+			optr[1] |= 0x04;
+		}
+		if(ctr == loopend) {
+			optr[1] |= 0x01;
+			if(!fade_on_loop) {
+				optr[1] |= 0x02;
+			}
+		}
+
+		int32_t outval;
+		for(int i = 0; i < 28; i++) {
+			int nyb = unfilter_buf[i];
+			if(best_power >= 1) {
+				nyb += (1<<(best_power-1));
+				nyb >>= best_power;
+			}
+			if(nyb < -0x8) { nyb = -0x8; }
+			if(nyb >  0x7) { nyb =  0x7; }
+			if((i & 0x1) == 0) { optr[(i>>1)+2] = 0x00; }
+			optr[(i>>1)+2] |= (nyb&0xF) << ((i&0x1)<<2);
+			outval = *pred1 + (nyb<<best_power);
+			if(outval < -0x8000) { outval = -0x8000; }
+			if(outval >  0x7FFF) { outval =  0x7FFF; }
+			*pred2 = *pred1;
+			*pred1 = outval;
+		}
+	}
+}
+
 void orelei_init_spu(void)
 {
 	for(int i = 0; i < SPU_CHANNEL_COUNT; i++) {

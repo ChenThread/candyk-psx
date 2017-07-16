@@ -11,6 +11,7 @@ void orelei_play_note(int ch, int sram_addr, int adsr, int voll, int volr, int p
 void orelei_stop_note(int ch);
 
 void orelei_sram_write_blocking(int sram_addr, void const* data, size_t len);
+void orelei_pack_spu(uint8_t *outbuf, const int16_t *inbuf, int16_t *pred1, int16_t *pred2, int blocks, int loopbeg, int loopend, bool fade_on_loop);
 
 void orelei_init_spu(void);
 
@@ -18,8 +19,7 @@ void orelei_init_spu(void);
 #define ORELEI_MIDI_MASTER_COUNT 16
 #define ORELEI_MIDI_MAX_TRACKS 32
 struct midi_master {
-	// TODO!
-	uint8_t dummy;
+	uint8_t prg;
 };
 struct midi_slave {
 	uint32_t last_touched;
@@ -35,6 +35,6 @@ struct midi_track {
 };
 
 void orelei_midi_reset(void);
-void orelei_midi_update(int32_t time_advanced_us);
+void orelei_midi_update(int32_t time_advanced_us, void (*f_play_note)(int hwch, int ch, int prg, int note, int vel));
 void orelei_midi_load_from_data(const uint8_t *midi_data);
 
