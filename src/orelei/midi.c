@@ -94,6 +94,11 @@ void orelei_midi_reset(void)
 	for(int i = 0; i < ORELEI_MIDI_MASTER_COUNT; i++) {
 		struct midi_master *M = &midi_masters[i];
 		M->prg = 0;
+		M->rpn_lo = 0x7F;
+		M->rpn_hi = 0x7F;
+		M->real_wheel = 0x2000;
+		M->wheel = 0x0000;
+		M->wheel_depth = 0x0200;
 	}
 
 	for(int i = 0; i < midi_track_count; i++) {
@@ -104,7 +109,7 @@ void orelei_midi_reset(void)
 	}
 }
 
-static void midi_note_on(int ch, int note, int vel, void (*f_play_note)(int hwch, int ch, int prg, int note, int vel))
+static void midi_note_on(int ch, int note, int vel, void (*f_play_note)(int hwch, int ch, int prg, int note, int vel, int wheel))
 {
 	int slave_idx = -1;
 
@@ -152,7 +157,7 @@ static void midi_note_on(int ch, int note, int vel, void (*f_play_note)(int hwch
 
 	// Play note
 	struct midi_master *M = &midi_masters[ch];
-	f_play_note(slave_idx, ch, M->prg, note, vel);
+	f_play_note(slave_idx, ch, M->prg, note, vel, M->wheel);
 }
 
 static void midi_note_off(int ch, int note, int vel)
@@ -168,7 +173,7 @@ static void midi_note_off(int ch, int note, int vel)
 }
 
 static int32_t midi_tick_accum = 0;
-void orelei_midi_update(int32_t time_advanced_us, void (*f_play_note)(int hwch, int ch, int prg, int note, int vel))
+void orelei_midi_update(int32_t time_advanced_us, void (*f_play_note)(int hwch, int ch, int prg, int note, int vel, int wheel))
 {
 	/*
 	Divisions = ticks per 1/4-note
@@ -226,6 +231,20 @@ void orelei_midi_update(int32_t time_advanced_us, void (*f_play_note)(int hwch, 
 					break;
 				case 0xB: // Controller
 					v2 = midi_read_u8(mpp);
+					switch(v1) {
+						case 0x06:
+							if(M->rpn_lo == 0x00 && M->rpn_hi == 0x00) {
+								// Pitch wheel depth
+								M->wheel_depth = ((int)v2)<<7;
+							}
+							break;
+						case 0x64:
+							M->rpn_lo = v2;
+							break;
+						case 0x65:
+							M->rpn_hi = v2;
+							break;
+					}
 					break;
 				case 0xC: // Program change
 					M->prg = v1 & 0x7F;
@@ -234,6 +253,15 @@ void orelei_midi_update(int32_t time_advanced_us, void (*f_play_note)(int hwch, 
 					break;
 				case 0xE: // Pitch bend
 					v2 = midi_read_u8(mpp);
+					// ...is LSB first. Good job, MIDI. Slow clap.
+					M->real_wheel = (((int32_t)v2)<<7)|((int32_t)v1);
+					M->wheel = ((M->real_wheel-0x2000)*M->wheel_depth + (1<<12))>>13;
+					for(int i = 0; i < 24; i++) {
+						struct midi_slave *S = &midi_slaves[i];
+						if(S->ch == (v0&0xF)) {
+							f_play_note(i, -1, M->prg, 0, 0, M->wheel);
+						}
+					}
 					break;
 				case 0xF: switch(v0) {
 					case 0xFF:

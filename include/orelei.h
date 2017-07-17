@@ -19,7 +19,11 @@ void orelei_init_spu(void);
 #define ORELEI_MIDI_MASTER_COUNT 16
 #define ORELEI_MIDI_MAX_TRACKS 32
 struct midi_master {
+	uint8_t rpn_lo, rpn_hi;
 	uint8_t prg;
+	uint16_t wheel_depth;
+	uint16_t real_wheel;
+	int16_t wheel;
 };
 struct midi_slave {
 	uint32_t last_touched;
@@ -35,6 +39,6 @@ struct midi_track {
 };
 
 void orelei_midi_reset(void);
-void orelei_midi_update(int32_t time_advanced_us, void (*f_play_note)(int hwch, int ch, int prg, int note, int vel));
+void orelei_midi_update(int32_t time_advanced_us, void (*f_play_note)(int hwch, int ch, int prg, int note, int vel, int wheel));
 void orelei_midi_load_from_data(const uint8_t *midi_data);
 
