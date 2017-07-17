@@ -308,7 +308,7 @@ int main(int argc, char *argv[])
 	// Zerofill EXE space
 	memset(&blank_page, 0, 0x800);
 	for(i = 0; i < psxh.filesz; i += 0x800) {
-		if(fwrite(&psxh, 0x800, 1, psx) != 1) {
+		if(fwrite(&blank_page, 0x800, 1, psx) != 1) {
 			perror("fwrite(psx zero)");
 			goto fail_close_psx;
 		}
