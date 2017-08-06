@@ -1,0 +1,5 @@
+bin=triangle.bin
+cue=triangle.cue
+lic=../../dat/isolicence.pal
+dat=./system.cnf
+dat=./triangle.exe
