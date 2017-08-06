@@ -6,10 +6,13 @@
 *.iso
 *.iso.bin
 *.iso.cue
+*.bin
+*.cue
 
 # Specific output
 bin/iso2raw
 bin/elf2psx
+bin/pscd-new
 
 # VIM
 .*.sw?

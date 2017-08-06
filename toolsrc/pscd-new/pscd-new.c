@@ -543,7 +543,9 @@ int assign_dent(const char *fname_in, dentmode_t dmode)
 		D->isodent.fname[i] = toupper(D->isodent.fname[i]);
 	}
 	strncpy(D->dir_fname, D->isodent.fname, sizeof(D->dir_fname));
-	strncat(D->isodent.fname, ";1", sizeof(D->isodent.fname));
+	if(dmode != DENT_DIR) {
+		strncat(D->isodent.fname, ";1", sizeof(D->isodent.fname));
+	}
 	D->dmode = dmode;
 	D->path_idx = (dmode != DENT_DIR ? -1 : dent_path_count++);
 	D->sector = (dmode != DENT_DIR ? 0 : D->path_idx + 22);
@@ -701,12 +703,12 @@ int main(int argc, char *argv[])
 			//printf("%d %d \"%s\" \"%s\" %d\n" , D->path_idx, D->parent_path , D->loc_fname , D->dir_fname , len_di);
 			secdata_in_data[ptsize++] = len_di;
 			secdata_in_data[ptsize++] = 0x00;
-			*(uint32_t *)(&secdata_in_data[ptsize]) = (
+			*(uint32_t *)(secdata_in_data+ptsize) = (
 				i == 0
 				? TOLE32(D->sector)
 				: TOBE32(D->sector)
 			); ptsize += 4;
-			*(uint16_t *)(&secdata_in_data[ptsize]) = (
+			*(uint16_t *)(secdata_in_data+ptsize) = (
 				i == 0
 				? TOLE16(D->parent_dir+1)
 				: TOBE16(D->parent_dir+1)
@@ -729,7 +731,8 @@ int main(int argc, char *argv[])
 	// Put files everywhere
 	for(int i = 0; i < dent_count; i++) {
 		locdent_t *D = &dent_list[i];
-		if(D->dmode == DENT_DIR) { continue; }
+		//if(D->dmode == DENT_DIR) { continue; }
+		printf("file \"%s\"\n", D->loc_fname);
 
 		switch(D->dmode) {
 			case DENT_DAT: {
@@ -745,11 +748,12 @@ int main(int argc, char *argv[])
 				D->isodent.dlen_be = TOBE32(dat_len);
 				sector_count += dat_sectors;
 
+				//fseek(binfp, 0x930*(D->sector+j), SEEK_SET);
+				fseek(binfp, 0x930*(D->sector), SEEK_SET);
 				for(int j = 0; j < dat_sectors; j++) {
 					memset(secdata_in_data, 0, sizeof(secdata_in_data));
 					memcpy(secdata_in_data, dat_buf+0x800*j,
 						(j < dat_sectors-1 ? 0x800: dat_len-0x800*j));
-					fseek(binfp, 0x930*(D->sector+j), SEEK_SET);
 					encode_sector(secdata_out, secdata_in_data, (D->sector+j), SEC_MODE2_FORM1);
 					fwrite(secdata_out, 0x930, 1, binfp);
 				}
@@ -771,11 +775,12 @@ int main(int argc, char *argv[])
 				D->isodent.dlen_be = TOBE32(raw_normlen);
 				sector_count += raw_sectors;
 
+				fseek(binfp, 0x930*(D->sector), SEEK_SET);
 				for(int j = 0; j < raw_sectors; j++) {
 					memset(secdata_in_raw, 0, sizeof(secdata_in_raw));
 					memcpy(secdata_in_raw, raw_buf+0x930*j,
 						(j < raw_sectors-1 ? 0x930: raw_len-0x930*j));
-					fseek(binfp, 0x930*(D->sector+j), SEEK_SET);
+					//fseek(binfp, 0x930*(D->sector+j), SEEK_SET);
 					encode_sector(secdata_out, secdata_in_raw, (D->sector+j), SEC_RAW);
 					fwrite(secdata_out, 0x930, 1, binfp);
 				}
@@ -785,6 +790,8 @@ int main(int argc, char *argv[])
 
 			case DENT_DIR:
 				// Do nothing
+				D->isodent.dlen_le = TOLE32(0x800);
+				D->isodent.dlen_be = TOBE32(0x800);
 				break;
 
 			default:
@@ -829,10 +836,10 @@ int main(int argc, char *argv[])
 		for(int j = 0; j < dent_count; j++) {
 			locdent_t *F = &dent_list[j];
 			if(j == i) { continue; }
-			if(F->parent_dir != D->path_idx) { continue; }
+			if(F->parent_dir != i) { continue; }
 			printf("- %d %d \"%s\"\n", j, F->sector, F->isodent.fname);
 			memcpy(p, &F->isodent, sizeof(F->isodent)-FNAME_MAX_LEN_ISO+F->isodent.len_fi);
-			p += sizeof(F->isodent)-FNAME_MAX_LEN_ISO+F->isodent.len_fi;
+			p += sizeof(F->isodent)-FNAME_MAX_LEN_ISO+((F->isodent.len_fi+1)&~1);
 			memcpy(p, &F->xadent, sizeof(F->xadent));
 			p += sizeof(F->xadent);
 		}
