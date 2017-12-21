@@ -226,6 +226,7 @@ typedef struct vdst {
 #define MAX_DENTS 2048
 locdent_t dent_list[MAX_DENTS];
 int dent_remap[MAX_DENTS];
+int dent_path_remap[MAX_DENTS];
 int dent_count = 0;
 int dent_path_count = 0;
 uint32_t sector_count = 0;
@@ -734,6 +735,10 @@ int main(int argc, char *argv[])
 
 	// Generate path table
 	// We have to do a little-endian ver and a big-endian ver
+	for(int j = 0; j < dent_count; j++) {
+		dent_path_remap[j] = -1;
+	}
+
 	int ptsize = 0;
 	for(int i = 0; i < 4; i+=2) {
 		ptsize = 0;
@@ -744,6 +749,7 @@ int main(int argc, char *argv[])
 		// If so, this will need a rework.
 		// FIXME: Yes, it does.
 
+		int pent_idx = 0;
 		for(int j = 0; j < dent_count; j++) {
 			locdent_t *D = &dent_list[dent_remap[j]];
 
@@ -767,10 +773,16 @@ int main(int argc, char *argv[])
 				? TOLE32(D->sector)
 				: TOBE32(D->sector)
 			); ptsize += 4;
+
+			if(pent_idx != 0) {
+				assert(dent_path_remap[D->parent_dir] != -1);
+			}
+			dent_path_remap[dent_remap[j]] = pent_idx;
+
 			*(uint16_t *)(secdata_in_data+ptsize) = (
 				i == 0
-				? TOLE16(dent_remap[D->parent_dir]+1)
-				: TOBE16(dent_remap[D->parent_dir]+1)
+				? TOLE16(dent_path_remap[D->parent_dir]+1)
+				: TOBE16(dent_path_remap[D->parent_dir]+1)
 			); ptsize += 2;
 			strncpy((char *)secdata_in_data+ptsize, D->dir_fname, len_di);
 			if(D->dir_fname[0] == '.') {
@@ -778,6 +790,7 @@ int main(int argc, char *argv[])
 			}
 			ptsize += (len_di+1)&~1;
 			assert(ptsize <= 0x800);
+			pent_idx++;
 		}
 
 		encode_sector(secdata_out, secdata_in_data, (18+i), SEC_MODE2_FORM1, 0x89);
@@ -940,7 +953,7 @@ int main(int argc, char *argv[])
 			34, 0,
 			22,0,0,0, 0,0,0,22,
 			0x00,0x08,0,0, 0,0,0x08,0x00, // length. do we patch this?
-			0,0,0,0,0,0,0,
+			70,1,1,0,0,0,0,
 			0x02,
 			0,0,
 			1,0,0,1,
