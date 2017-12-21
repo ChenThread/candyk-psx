@@ -8,8 +8,17 @@
 
 #include <ctype.h>
 
-#define BSWAP16(v) ((((v)>>8)&0xFF)|(((v)<<8)&0xFF00))
-#define BSWAP32(v) (((BSWAP16(v)>>16)&0xFF)|((BSWAP16(v)<<16)&0xFF00))
+//define BSWAP16(v) ((((v)>>8)&0xFF)|(((v)<<8)&0xFF00))
+//define BSWAP32(v) (((BSWAP16(v)>>16)&0xFFFF)|((BSWAP16(v)<<16)&0xFFFF0000))
+uint32_t BSWAP16(uint32_t v) {
+	v = ((v & 0x00FF)<<8) | ((v & 0xFF00)>>8);
+	return v;
+}
+uint32_t BSWAP32(uint32_t v) {
+	v = ((v & 0x00FF00FF)<< 8) | ((v & 0xFF00FF00)>> 8);
+	v = ((v & 0x0000FFFF)<<16) | ((v & 0xFFFF0000)>>16);
+	return v;
+}
 #define TOLE16(v) (v)
 #define TOBE16(v) BSWAP16(v)
 #define TOLE32(v) (v)
@@ -216,6 +225,7 @@ typedef struct vdst {
 
 #define MAX_DENTS 2048
 locdent_t dent_list[MAX_DENTS];
+int dent_remap[MAX_DENTS];
 int dent_count = 0;
 int dent_path_count = 0;
 uint32_t sector_count = 0;
@@ -242,6 +252,7 @@ void free_whole_file(char **bufptr, size_t *buf_len)
 
 int load_whole_file(char **bufptr, size_t *buf_len, const char *fname)
 {
+	printf("Loading \"%s\"\n", fname);
 	FILE *fp = fopen(fname, "rb");
 	assert(fp != NULL);
 
@@ -402,7 +413,7 @@ int tobcd8(int v)
 	return (v%10)+((v/10)<<4);
 }
 
-void encode_sector(uint8_t *rawsec, const uint8_t *srcsec, int lba, secmode_t secmode)
+void encode_sector(uint8_t *rawsec, const uint8_t *srcsec, int lba, secmode_t secmode, uint8_t submode)
 {
 	// Sync
 	memset(rawsec+0x000, 0x00, 0x930-0x000);
@@ -458,7 +469,7 @@ void encode_sector(uint8_t *rawsec, const uint8_t *srcsec, int lba, secmode_t se
 			rawsec[0x00F] = 0x02;
 			rawsec[0x010] = rawsec[0x014] = 0x00;
 			rawsec[0x011] = rawsec[0x015] = 0x00;
-			rawsec[0x012] = rawsec[0x016] = 0x08;
+			rawsec[0x012] = rawsec[0x016] = submode&~0x20;
 			rawsec[0x013] = rawsec[0x017] = 0x00;
 			memcpy(rawsec+0x018, srcsec, 0x800);
 			adjust_edc(rawsec+0x010, 0x808);
@@ -553,8 +564,15 @@ int assign_dent(const char *fname_in, dentmode_t dmode)
 	D->parent_path = (parent_idx == -1 ? -1 : dent_list[parent_idx].path_idx);
 	printf("%d %d %d %d \"%s\" \"%s\"\n", ent_idx, dmode, parent_idx, D->parent_path, fname_in, c_sep+1);
 
+	D->isodent.ts_year = 70;
+	D->isodent.ts_month = 1;
+	D->isodent.ts_day = 1;
+	D->isodent.ts_hour = 0;
+	D->isodent.ts_minute = 0;
+	D->isodent.ts_second = 0;
+	D->isodent.ts_timezone = 0;
 	D->isodent.len_fi = strlen(D->isodent.fname);
-	D->isodent.len_dr = 33+14+((D->isodent.len_fi+1)&~1);
+	D->isodent.len_dr = 14+((33+D->isodent.len_fi+1)&~1);
 	D->isodent.flags = (dmode == DENT_DIR ? 0x02 : 0x00);
 	D->isodent.vsnum_le = TOLE16(0x0001);
 	D->isodent.vsnum_be = TOBE16(0x0001);
@@ -652,6 +670,46 @@ int main(int argc, char *argv[])
 	// Close manifest
 	fclose(manifestfp);
 
+	// Sort directories in 1. parent node order, 2. alphabetical order
+	{
+		// Create identity mapping
+		for(int i = 0; i < dent_count; i++) {
+			dent_remap[i] = i;
+		}
+
+		// Find first non-root dir
+		int i0 = 0;
+		for(; i0 < dent_count; i0++) {
+			locdent_t *D0 = &dent_list[dent_remap[i0]];
+			//if(D0->dmode != DENT_DIR) { continue; }
+			if(!strcmp(D0->isodent.fname, ".")) { continue; }
+			if(!strcmp(D0->isodent.fname, "..")) { continue; }
+			break;
+		}
+
+		// Bubblesort directories
+		for(; i0 < dent_count; i0++) {
+			locdent_t *D0 = &dent_list[dent_remap[i0]];
+			//if(D0->dmode != DENT_DIR) { continue; }
+
+			for(int i1 = i0+1; i1 < dent_count; i1++) {
+				int tmp;
+				locdent_t *D1 = &dent_list[dent_remap[i1]];
+				//if(D1->dmode != DENT_DIR) { continue; }
+				if(D0->parent_dir > D1->parent_dir ||
+						(D0->parent_dir == D1->parent_dir && strcmp(D0->isodent.fname, D1->isodent.fname) > 0)) {
+					//printf("swap: \"%s\" \"%s\"\n", D0->isodent.fname, D1->isodent.fname);
+					memcpy(&tmp,            &dent_remap[i0], sizeof(tmp));
+					memcpy(&dent_remap[i0], &dent_remap[i1], sizeof(tmp));
+					memcpy(&dent_remap[i1], &tmp,            sizeof(tmp));
+					D0 = &dent_list[dent_remap[i0]];
+				}
+			}
+
+			printf("new dir: %d %d %d \"%s\"\n", i0, D0->path_idx, D0->sector, D0->isodent.fname);
+		}
+	}
+
 	// Ensure that we are ready to make an image
 	assert(fname_bin != NULL);
 	assert(fname_cue != NULL);
@@ -684,9 +742,10 @@ int main(int argc, char *argv[])
 
 		// XXX: Does this require everything to be ordered by depth?
 		// If so, this will need a rework.
+		// FIXME: Yes, it does.
 
 		for(int j = 0; j < dent_count; j++) {
-			locdent_t *D = &dent_list[j];
+			locdent_t *D = &dent_list[dent_remap[j]];
 
 			if(D->dmode != DENT_DIR) { continue; }
 
@@ -710,8 +769,8 @@ int main(int argc, char *argv[])
 			); ptsize += 4;
 			*(uint16_t *)(secdata_in_data+ptsize) = (
 				i == 0
-				? TOLE16(D->parent_dir+1)
-				: TOBE16(D->parent_dir+1)
+				? TOLE16(dent_remap[D->parent_dir]+1)
+				: TOBE16(dent_remap[D->parent_dir]+1)
 			); ptsize += 2;
 			strncpy((char *)secdata_in_data+ptsize, D->dir_fname, len_di);
 			if(D->dir_fname[0] == '.') {
@@ -721,9 +780,9 @@ int main(int argc, char *argv[])
 			assert(ptsize <= 0x800);
 		}
 
-		encode_sector(secdata_out, secdata_in_data, (18+i), SEC_MODE2_FORM1);
+		encode_sector(secdata_out, secdata_in_data, (18+i), SEC_MODE2_FORM1, 0x89);
 		fwrite(secdata_out, 0x930, 1, binfp);
-		encode_sector(secdata_out, secdata_in_data, (19+i), SEC_MODE2_FORM1);
+		encode_sector(secdata_out, secdata_in_data, (19+i), SEC_MODE2_FORM1, 0x89);
 		fwrite(secdata_out, 0x930, 1, binfp);
 	}
 	printf("ptsize = %d\n", ptsize);
@@ -754,7 +813,7 @@ int main(int argc, char *argv[])
 					memset(secdata_in_data, 0, sizeof(secdata_in_data));
 					memcpy(secdata_in_data, dat_buf+0x800*j,
 						(j < dat_sectors-1 ? 0x800: dat_len-0x800*j));
-					encode_sector(secdata_out, secdata_in_data, (D->sector+j), SEC_MODE2_FORM1);
+					encode_sector(secdata_out, secdata_in_data, (D->sector+j), SEC_MODE2_FORM1, (j+1 == dat_sectors ? 0x89 : 0x08));
 					fwrite(secdata_out, 0x930, 1, binfp);
 				}
 
@@ -781,7 +840,7 @@ int main(int argc, char *argv[])
 					memcpy(secdata_in_raw, raw_buf+0x930*j,
 						(j < raw_sectors-1 ? 0x930: raw_len-0x930*j));
 					//fseek(binfp, 0x930*(D->sector+j), SEEK_SET);
-					encode_sector(secdata_out, secdata_in_raw, (D->sector+j), SEC_RAW);
+					encode_sector(secdata_out, secdata_in_raw, (D->sector+j), SEC_RAW, 0x00);
 					fwrite(secdata_out, 0x930, 1, binfp);
 				}
 
@@ -790,6 +849,8 @@ int main(int argc, char *argv[])
 
 			case DENT_DIR:
 				// Do nothing
+				D->isodent.dblk_le = TOLE32(D->sector);
+				D->isodent.dblk_be = TOBE32(D->sector);
 				D->isodent.dlen_le = TOLE32(0x800);
 				D->isodent.dlen_be = TOBE32(0x800);
 				break;
@@ -809,7 +870,7 @@ int main(int argc, char *argv[])
 
 		memset(secdata_in_data, 0, sizeof(secdata_in_data));
 
-		printf("Directory! %d %d %d \"%s\"\n", i, D->path_idx, D->sector, D->isodent.fname);
+		printf("Directory! %d %d %d %d \"%s\"\n", i, D->path_idx, D->sector, D->parent_dir, D->isodent.fname);
 		uint8_t *p = secdata_in_data;
 
 		// Generate main link
@@ -834,19 +895,20 @@ int main(int argc, char *argv[])
 
 		// Generate file stuff
 		for(int j = 0; j < dent_count; j++) {
-			locdent_t *F = &dent_list[j];
+			locdent_t *F = &dent_list[dent_remap[j]];
 			if(j == i) { continue; }
 			if(F->parent_dir != i) { continue; }
 			printf("- %d %d \"%s\"\n", j, F->sector, F->isodent.fname);
 			memcpy(p, &F->isodent, sizeof(F->isodent)-FNAME_MAX_LEN_ISO+F->isodent.len_fi);
-			p += sizeof(F->isodent)-FNAME_MAX_LEN_ISO+((F->isodent.len_fi+1)&~1);
+			//p += sizeof(F->isodent)-FNAME_MAX_LEN_ISO+((F->isodent.len_fi+1)&~1);
+			p += F->isodent.len_dr-sizeof(F->xadent);
 			memcpy(p, &F->xadent, sizeof(F->xadent));
 			p += sizeof(F->xadent);
 		}
 
 		// TODO!
 
-		encode_sector(secdata_out, secdata_in_data, (22+D->path_idx), SEC_MODE2_FORM1);
+		encode_sector(secdata_out, secdata_in_data, (22+D->path_idx), SEC_MODE2_FORM1, 0x89);
 		fwrite(secdata_out, 0x930, 1, binfp);
 	}
 
@@ -898,7 +960,16 @@ int main(int argc, char *argv[])
 		.fsver = 0x01,
 		.xamagic1 = "CD-XA001",
 	};
-	encode_sector(secdata_out, (uint8_t *)&pvd, 16, SEC_MODE2_FORM1);
+	encode_sector(secdata_out, (uint8_t *)&pvd, 16, SEC_MODE2_FORM1, 0x09);
+	fwrite(secdata_out, 0x930, 1, binfp);
+
+	// Generate VDST
+	vdst_t vdst = {
+		.vdtype = 0xFF, // 0xFF = terminator
+		.magic1 = "CD001", // "CD001"
+		.vdver = 0x01, // 0x01
+	};
+	encode_sector(secdata_out, (uint8_t *)&vdst, 17, SEC_MODE2_FORM1, 0x89);
 	fwrite(secdata_out, 0x930, 1, binfp);
 
 	// Close bin file
@@ -926,35 +997,6 @@ int main(int argc, char *argv[])
 		// We are done here.
 		fclose(cuefp);
 	}
-
-#if 0
-	// All the sectors!
-	FILE *srcfp = fopen(argv[5], "rb");
-	for(int i = 0;  true ; i++) {
-		printf("Sector: %d/%d\n", i, wad_scount);
-
-		fseek(fp, 0x930*(wad_sector+i), SEEK_SET);
-		int wad_count = fread(wad_secdata, 0x930, 1, fp);
-		uint8_t srcbuf[0x800];
-		memset(srcbuf, 0, sizeof(srcbuf));
-		size_t bytes_read = fread(srcbuf, 1, sizeof(srcbuf), srcfp);
-		printf("bytes read: %d\n", (int)bytes_read);
-		if(bytes_read == 0) {
-			break;
-		}
-
-		//encode_sector(secdata_out, wad_secdata+0x018, wad_sector, SEC_MODE2_FORM1);
-		encode_sector(secdata_out, srcbuf, wad_sector+i, SEC_MODE2_FORM1);
-		//for(int i = 0; i < 0x930; i++) {
-		for(int i = 0; i < 0x030; i++) {
-			printf(" %02X", wad_secdata[i]^secdata_out[i]);
-			if((i&0xF)==0xF) { printf("\n"); }
-		}
-
-		fseek(fp, 0x930*(wad_sector+i), SEEK_SET);
-		fwrite(secdata_out, 0x930, 1, fp);
-	}
-#endif
 
 	return 0;
 }
