@@ -318,6 +318,10 @@ int main(int argc, char *argv[])
 	for(i = 0; i < ehdr.phdr_ent_count; i++) {
 		phdr = &phdrs[i];
 
+		if(phdr->type != PT_LOAD) {
+			continue;
+		}
+
 		// Calculate output address
 		addr = phdr->vaddr - target_ftext;
 		if(addr < 0 || addr >= psxh.filesz || addr+phdr->filesz >= psxh.filesz) {
