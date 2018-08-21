@@ -324,7 +324,7 @@ int main(int argc, char *argv[])
 
 		// Calculate output address
 		addr = phdr->vaddr - target_ftext;
-		if(addr < 0 || addr >= psxh.filesz || addr+phdr->filesz >= psxh.filesz) {
+		if(addr < 0 || addr >= psxh.filesz || addr+phdr->filesz > psxh.filesz) {
 			fprintf(stderr, "PT_LOAD destination out of range\n");
 			goto fail_close_psx;
 		}
