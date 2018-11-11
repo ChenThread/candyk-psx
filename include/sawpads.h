@@ -7,8 +7,11 @@ Code by asie and GreaseMonkey,
 the former of whom actually made this code work properly
 */
 
-void sawpads_unlock_dualshock(void);
+void sawpads_isr_joy(void);
+void sawpads_isr_vblank(void);
+
 void sawpads_do_read(void);
+void sawpads_unlock_dualshock(void);
 
 extern volatile uint8_t sawpads_id;
 extern volatile uint8_t sawpads_hid;
