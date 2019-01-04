@@ -322,6 +322,10 @@ int main(int argc, char *argv[])
 			continue;
 		}
 
+		if(phdr->filesz == 0) {
+			continue;
+		}
+
 		// Calculate output address
 		addr = phdr->vaddr - target_ftext;
 		if(addr < 0 || addr >= psxh.filesz || addr+phdr->filesz > psxh.filesz) {
