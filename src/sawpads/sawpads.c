@@ -111,9 +111,9 @@ void sawpads_do_read(void)
 {
 	uint8_t rumble_buf[2];
 	uint8_t sawpads_analogs = 0;
+	rumble_buf[0] = sawpads_rumble[0];
+	rumble_buf[1] = sawpads_rumble[1];
 	uint8_t sawpads_words = sawpads_read_words(0x42, rumble_buf, 2);
-	sawpads_rumble[0] = rumble_buf[0];
-	sawpads_rumble[1] = rumble_buf[1];
 
 	if(sawpads_words >= 1) {
 		sawpads_buttons = sawpads_buffer[0];
