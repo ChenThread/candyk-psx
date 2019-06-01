@@ -7,6 +7,9 @@ Code by asie and GreaseMonkey,
 the former of whom actually made this code work properly
 */
 
+int32_t sawpads_read_card_sector(uint16_t address, uint8_t *buffer);
+int32_t sawpads_write_card_sector(uint16_t address, uint8_t *buffer);
+
 void sawpads_isr_joy(void);
 void sawpads_isr_vblank(void);
 
