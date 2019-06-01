@@ -126,7 +126,7 @@ int32_t sawpads_read_card_sector(uint16_t address, uint8_t *buffer)
 		// TODO: is this the right way to sense? guessing
 		if ((id & 0xFF00) != 0x5A00) {
 			sawpads_stop_read();
-			return -1;
+			continue;
 		}
 
 		sawpads_send(address >> 8, true);
@@ -188,7 +188,7 @@ int32_t sawpads_write_card_sector(uint16_t address, uint8_t *buffer)
 		// TODO: is this the right way to sense? guessing
 		if ((id & 0xFF00) != 0x5A00) {
 			sawpads_stop_read();
-			return 0;
+			continue;
 		}
 
 		sawpads_send(address >> 8, true);
@@ -208,7 +208,6 @@ int32_t sawpads_write_card_sector(uint16_t address, uint8_t *buffer)
 
 		uint8_t result = sawpads_send(0x00, true);
 		sawpads_stop_read();
-
 		switch (result) {
 			case 0x47:
 				return 128;
@@ -216,7 +215,7 @@ int32_t sawpads_write_card_sector(uint16_t address, uint8_t *buffer)
 				continue;
 			case 0xFF:
 			default:
-				return 0;
+				continue;
 		}
 	}
 
