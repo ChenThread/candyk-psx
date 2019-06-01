@@ -27,7 +27,7 @@ volatile uint8_t sawpads_has_ack = 0;
 volatile uint16_t sawpads_buffer[16];
 volatile uint8_t sawpads_rumble[2];
 
-void sawpads_stop_read(void)
+static void sawpads_stop_read(void)
 {
 	PSXREG_JOY_CTRL = 0x0010;
 	sawpads_read_counter++;
@@ -39,13 +39,13 @@ void sawpads_stop_read(void)
 	sawpads_has_ack = 0;
 }
 
-uint8_t sawpads_recv_solo(void)
+static uint8_t sawpads_recv_solo(void)
 {
 	while((PSXREG_JOY_STAT & (1<<1)) == 0) {}
 	return PSXREG_JOY_DATA;
 }
 
-uint8_t sawpads_send(uint8_t data, bool wait_ack)
+static uint8_t sawpads_send(uint8_t data, bool wait_ack)
 {
 	sawpads_has_ack = 0;
 	if(!wait_ack) {
@@ -75,7 +75,7 @@ uint8_t sawpads_send(uint8_t data, bool wait_ack)
 	return PSXREG_JOY_DATA;
 }
 
-void sawpads_start_read(void)
+static void sawpads_start_read(void)
 {
 	PSXREG_JOY_CTRL = 0x1013;
 
@@ -85,7 +85,7 @@ void sawpads_start_read(void)
 	}
 }
 
-uint8_t sawpads_read_words(uint8_t cmd, uint8_t* response, int response_len)
+static uint8_t sawpads_read_words(uint8_t cmd, uint8_t* response, int response_len)
 {
 	uint8_t sawpads_hwords = 0;
 
@@ -105,6 +105,122 @@ uint8_t sawpads_read_words(uint8_t cmd, uint8_t* response, int response_len)
 	sawpads_stop_read();
 
 	return sawpads_hwords;
+}
+
+int32_t sawpads_read_card_sector(uint16_t address, uint8_t *buffer)
+{
+	uint8_t flag;
+	uint16_t id;
+	int8_t attempts = 3;
+	uint8_t checksum = 0;
+
+	while ((--attempts) >= 0) {
+		uint16_t conf_addr;
+
+		sawpads_start_read();
+		sawpads_send(0x81, true);
+		flag = sawpads_send(0x52, true);
+		id = sawpads_send(0x00, true) << 8;
+		id |= sawpads_send(0x00, true);
+
+		// TODO: is this the right way to sense? guessing
+		if ((id & 0xFF00) != 0x5A00) {
+			sawpads_stop_read();
+			return -1;
+		}
+
+		sawpads_send(address >> 8, true);
+		sawpads_send(address & 0xFF, true);
+
+		sawpads_send(0x00, true); // ACK
+		sawpads_send(0x00, true); // ACK
+
+		conf_addr = sawpads_send(0x00, true) << 8;
+		conf_addr |= sawpads_send(0x00, true);
+		if ((conf_addr & 0x3FF) != (address & 0x3FF)) {
+			// try again, loop back
+			sawpads_stop_read();
+			continue;
+		}
+
+		checksum = (address >> 8) ^ (address & 0xFF);
+
+		for (int i = 0; i < 128; i++) {
+			uint8_t val = sawpads_send(0x00, true);
+			buffer[i] = val;
+			checksum ^= val;
+		}
+
+		if (sawpads_send(0x00, true) != checksum) {
+			sawpads_stop_read();
+			continue;
+		}
+
+		uint8_t result = sawpads_send(0x00, true);
+		sawpads_stop_read();
+		switch (result) {
+			case 0x47:
+				return 128;
+			default:
+				continue;
+		}
+	}
+
+	return 0;
+}
+
+int32_t sawpads_write_card_sector(uint16_t address, uint8_t *buffer)
+{
+	uint8_t flag;
+	uint16_t id;
+	int8_t attempts = 3;
+	uint8_t checksum = 0;
+
+	while ((--attempts) >= 0) {
+		uint16_t conf_addr;
+
+		sawpads_start_read();
+		sawpads_send(0x81, true);
+		flag = sawpads_send(0x57, true);
+		id = sawpads_send(0x00, true) << 8;
+		id |= sawpads_send(0x00, true);
+
+		// TODO: is this the right way to sense? guessing
+		if ((id & 0xFF00) != 0x5A00) {
+			sawpads_stop_read();
+			return 0;
+		}
+
+		sawpads_send(address >> 8, true);
+		sawpads_send(address & 0xFF, true);
+
+		checksum = (address >> 8) ^ (address & 0xFF);
+		for (int i = 0; i < 128; i++) {
+			uint8_t val = buffer[i];
+			checksum ^= val;
+			sawpads_send(val, true);
+		}
+
+		sawpads_send(checksum, true);
+
+		sawpads_send(0x00, true); // ACK
+		sawpads_send(0x00, true); // ACK
+
+		uint8_t result = sawpads_send(0x00, true);
+		sawpads_stop_read();
+
+		switch (result) {
+			case 0x47:
+				return 128;
+			case 0x4E:
+				continue;
+			case 0xFF:
+			default:
+				return 0;
+		}
+	}
+
+	return 0;
 }
 
 void sawpads_do_read(void)
