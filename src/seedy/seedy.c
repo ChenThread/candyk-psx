@@ -14,6 +14,16 @@ https://creativecommons.org/publicdomain/zero/1.0/
 #include <psxdefs/intc.h>
 #include <psxdefs/cdrom.h>
 #include <psxregs.h>
+#include <seedy.h>
+
+//
+// Maths!
+//
+
+static inline int tobcd8(int v)
+{
+	return (v%10)+((v/10)<<4);
+}
 
 //
 // Raw hardware interface
@@ -29,11 +39,12 @@ void seedy_wait_until_ready(void)
 int seedy_poll_interrupt_blocking(void)
 {
 	PSXREG_CDROM_In_IDXSR = 0x01;
-	PSXREG_CDROM_I1_INTFLG = 0x5F;
+	PSXREG_CDROM_I1_INTFLG = 0x1F;
 	while((PSXREG_CDROM_I1_INTFLG & 0x07) == 0x00) {
 		// wait for interrupt
 	}
 	int result = (PSXREG_CDROM_I1_INTFLG & 0x07);
+	PSXREG_CDROM_I1_INTFLG = 0x47;
 	return result;
 }
 
@@ -95,8 +106,8 @@ void seedy_send_cmd_setloc(int min, int sec, int sub)
 
 void seedy_send_cmd_setloc_lba(int sector) // Helper
 {
-	sector += 75*60*2;
-	seedy_send_cmd_setloc(sector/(60*75), (sector/75)%60, sector%75);
+	sector += 75*2;
+	seedy_send_cmd_setloc(tobcd8(sector/(60*75)), tobcd8((sector/75)%60), tobcd8(sector%75));
 }
 
 void seedy_send_cmd_play_notrack()
@@ -178,7 +189,7 @@ void seedy_send_cmd_setmode(int mode)
 {
 	seedy_start_command();
 	seedy_write_param(mode);
-	seedy_write_command(CD_CMD_SETFILTER);
+	seedy_write_command(CD_CMD_SETMODE);
 }
 
 void seedy_send_cmd_getparam(void)
@@ -258,6 +269,107 @@ void seedy_isr_cdrom(void)
 }
 
 //
+// Helpers
+//
+
+static void seedy_setloc_lba(int lba)
+{
+	{
+		seedy_send_cmd_setsession(0x01);
+		int _isr1 = seedy_poll_interrupt_blocking();
+		int _val1 = seedy_read_response();
+		if(_isr1 == 0x05) {
+			seedy_read_response();
+			seedy_ack_main_interrupt();
+		} else {
+			seedy_ack_main_interrupt();
+			int _isr2 = seedy_poll_interrupt_blocking();
+			int _val2 = seedy_read_response();
+			seedy_ack_main_interrupt();
+		}
+	}
+
+	{
+		seedy_send_cmd_setloc_lba(lba);
+		int setloc_isr1 = seedy_poll_interrupt_blocking();
+		int setloc_val1 = seedy_read_response();
+		if(setloc_isr1 == 0x05) {
+			seedy_read_response();
+		}
+		seedy_ack_main_interrupt();
+	}
+}
+
+int seedy_read_data_sync(int lba, int flags, uint8_t *buffer, int size)
+{
+	int bufpos = 0;
+	int secsize = (flags & SEEDY_READ_WHOLE_SECTORS) ? 0x924 : 0x800;
+
+	seedy_send_cmd_setmode(
+		(!(flags & SEEDY_READ_SINGLE_SPEED) ? 0x80 : 0)
+		| ((flags & SEEDY_READ_WHOLE_SECTORS) ? 0x20 : 0)
+	);
+	seedy_setloc_lba(lba);
+
+	{
+		seedy_send_cmd_readn();
+		int readn_isr1 = seedy_poll_interrupt_blocking();
+		int readn_val1 = seedy_read_response();
+		if(readn_isr1 == 0x03) {
+			seedy_ack_main_interrupt();
+			int readn_isr2 = seedy_poll_interrupt_blocking();
+			int readn_val2 = seedy_read_response();
+			seedy_ack_main_interrupt();
+			if(readn_isr2 == 0x01) {
+				PSXREG_CDROM_In_IDXSR = 0x00;
+				PSXREG_CDROM_I0_RQST_W = 0x00;
+				PSXREG_CDROM_I0_RQST_W = 0x80;
+				while((PSXREG_CDROM_In_IDXSR & 0x40) == 0) {
+					// wait
+				}
+
+				// Read as much of the buffer as we can
+				for(int reps = ((size + secsize - 1) / secsize); reps > 0; reps--) {
+					PSXREG_CDROM_In_IDXSR = 0x00;
+					PSXREG_CDROM_I0_RQST_W = 0x80;
+					for(int i = 0; i < secsize; i++) {
+						while((PSXREG_CDROM_In_IDXSR & 0x40) == 0) {
+							// wait
+						}
+						buffer[bufpos++] = PSXREG_CDROM_In_DATA_R;
+						if (bufpos >= size) break;
+					}
+					while((PSXREG_CDROM_In_IDXSR & 0x40) != 0) {
+						volatile int k = PSXREG_CDROM_In_DATA_R;
+					}
+					while((PSXREG_CDROM_In_IDXSR & 0x20) != 0) {
+						volatile int k = seedy_read_response();
+					}
+
+					if(reps > 1) {
+						int readn_isr2 = seedy_poll_interrupt_blocking();
+						int readn_val2 = seedy_read_response();
+						seedy_ack_main_interrupt();
+					}
+				}
+
+				// Pause the damn thing
+				seedy_send_cmd_pause();
+				int pause_isr1 = seedy_poll_interrupt_blocking();
+				int pause_val1 = seedy_read_response();
+				seedy_ack_main_interrupt();
+				int pause_isr2 = seedy_poll_interrupt_blocking();
+				int pause_val2 = seedy_read_response();
+				seedy_ack_main_interrupt();
+			}
+		} else {
+			seedy_read_response();
+			seedy_ack_main_interrupt();
+		}
+	}
+}
+
+//
 // Initialisation
 //
 
@@ -295,88 +407,6 @@ void seedy_init_cdrom(void)
 		int demute_isr1 = seedy_poll_interrupt_blocking();
 		int demute_val1 = seedy_read_response();
 		seedy_ack_main_interrupt();
-	}
-
-	{
-		seedy_send_cmd_setsession(0x01);
-		int _isr1 = seedy_poll_interrupt_blocking();
-		int _val1 = seedy_read_response();
-		if(_isr1 == 0x05) {
-			seedy_read_response();
-			seedy_ack_main_interrupt();
-		} else {
-			seedy_ack_main_interrupt();
-			int _isr2 = seedy_poll_interrupt_blocking();
-			int _val2 = seedy_read_response();
-			seedy_ack_main_interrupt();
-		}
-	}
-
-	{
-		seedy_send_cmd_setloc_lba(16);
-		int setloc_isr1 = seedy_poll_interrupt_blocking();
-		int setloc_val1 = seedy_read_response();
-		if(setloc_isr1 == 0x05) {
-			seedy_read_response();
-		}
-		seedy_ack_main_interrupt();
-	}
-
-	{
-		seedy_send_cmd_readn();
-		int readn_isr1 = seedy_poll_interrupt_blocking();
-		int readn_val1 = seedy_read_response();
-		if(readn_isr1 == 0x03) {
-			seedy_ack_main_interrupt();
-			int readn_isr2 = seedy_poll_interrupt_blocking();
-			int readn_val2 = seedy_read_response();
-			seedy_ack_main_interrupt();
-			if(readn_isr2 == 0x01) {
-				PSXREG_CDROM_In_IDXSR = 0x00;
-				PSXREG_CDROM_I0_RQST_W = 0x00;
-				PSXREG_CDROM_I0_RQST_W = 0x80;
-				while((PSXREG_CDROM_In_IDXSR & 0x40) == 0) {
-					// wait
-				}
-
-				// Read as much of the buffer as we can
-				uint8_t *ptr = (uint8_t *)0x1FE000;
-				for(int reps = 1; reps > 0; reps--) {
-					PSXREG_CDROM_In_IDXSR = 0x00;
-					PSXREG_CDROM_I0_RQST_W = 0x80;
-					for(int i = 0; i < 0x800; i++) {
-						while((PSXREG_CDROM_In_IDXSR & 0x40) == 0) {
-							// wait
-						}
-						ptr[i] = PSXREG_CDROM_In_DATA_R;
-					}
-					while((PSXREG_CDROM_In_IDXSR & 0x40) != 0) {
-						volatile int k = PSXREG_CDROM_In_DATA_R;
-					}
-					while((PSXREG_CDROM_In_IDXSR & 0x20) != 0) {
-						volatile int k = seedy_read_response();
-					}
-
-					if(reps > 1) {
-						int readn_isr2 = seedy_poll_interrupt_blocking();
-						int readn_val2 = seedy_read_response();
-						seedy_ack_main_interrupt();
-					}
-				}
-
-				// Pause the damn thing
-				seedy_send_cmd_pause();
-				int pause_isr1 = seedy_poll_interrupt_blocking();
-				int pause_val1 = seedy_read_response();
-				seedy_ack_main_interrupt();
-				int pause_isr2 = seedy_poll_interrupt_blocking();
-				int pause_val2 = seedy_read_response();
-				seedy_ack_main_interrupt();
-			}
-		} else {
-			seedy_read_response();
-			seedy_ack_main_interrupt();
-		}
 	}
 }
 
