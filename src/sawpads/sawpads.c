@@ -1,4 +1,4 @@
-/*
+	/*
 sawpads: Actually Tested* Joypad Code
 Copyright (C) Chen Thread, 2017, licensed under Creative Commons Zero:
 https://creativecommons.org/publicdomain/zero/1.0/
@@ -62,25 +62,26 @@ static uint8_t sawpads_send(uint8_t data, bool wait_ack)
 		for(uint32_t i = 0; i < 0x44*100; i++) {
 			asm volatile ("");
 			if(sawpads_has_ack != 0) {
-				break;
+				sawpads_has_ack--;
+				return PSXREG_JOY_DATA;
 			}
 		}
 
-		sawpads_has_ack--;
+		return 0xFF; // no data
 	} else {
 		while((PSXREG_JOY_STAT & (1<<1)) == 0) {}
 		// But wait anyway
 		for(uint32_t i = 0; i < 0x44*10; i++) { asm volatile (""); }
+		return PSXREG_JOY_DATA;
 	}
-	return PSXREG_JOY_DATA;
 }
 
 static void sawpads_start_read(void)
 {
 	PSXREG_JOY_CTRL = 0x1013;
 
-	// Kill time (not known how long)
-	for(uint32_t i = 0; i < 10000; i++) {
+	// Kill time (more than 2000 cycles is overkill according to nocash)
+	for(uint32_t i = 0; i < 1500; i++) {
 		asm volatile ("");
 	}
 }
@@ -92,11 +93,15 @@ static uint8_t sawpads_read_words(uint8_t cmd, uint8_t* response, int response_l
 	sawpads_start_read();
 	sawpads_send(0x01, true);
 	sawpads_id = sawpads_send(cmd, true);
-	sawpads_hwords = sawpads_id;
+	sawpads_hwords = (uint8_t) sawpads_id;
 	sawpads_hwords -= 1;
 	sawpads_hwords &= 0x0F;
 	sawpads_hwords += 1;
 	sawpads_hid = sawpads_send(0x00, true);
+	if (sawpads_hid == 0xFF) {
+		// no controller connected
+		return 0;
+	}
 	int j = 0;
 	for (int i = 0; i < sawpads_hwords; i++) {
 		sawpads_buffer[i] = sawpads_send(j < response_len ? response[j++] : 0xFF, true);
@@ -242,6 +247,8 @@ void sawpads_do_read(void)
 				sawpads_axes[3] = sawpads_buffer[2] >> 8;
 			}
 		}
+	} else {
+		sawpads_buttons = 0xFFFF;
 	}
 
 	for (int i = 0; i < sawpads_analogs; i++) {
@@ -249,6 +256,9 @@ void sawpads_do_read(void)
 			sawpads_axes[i] = 0x00;
 		else
 			sawpads_axes[i] ^= 0x80;
+	}
+	for (int i = sawpads_analogs; i < 4; i++) {
+		sawpads_axes[i] = 0x00;
 	}
 }
 
