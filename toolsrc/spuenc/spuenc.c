@@ -408,7 +408,7 @@ int parse_args(settings_t* settings, int argc, char** argv) {
 			case 't': {
 				if (strcmp(optarg, "xa") == 0) {
 					settings->format = FORMAT_XA;
-				} else if (strcmp(optarg, "xaraw") == 0) {
+				} else if (strcmp(optarg, "xacd") == 0) {
 					settings->format = FORMAT_XACD;
 				} else if (strcmp(optarg, "spu") == 0) {
 					settings->format = FORMAT_SPU;
