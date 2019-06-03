@@ -1,10 +1,11 @@
 /*
 spuenc: SPU/XA-ADPCM audio encoder
 Copyright (c) 2019 Adrian "asie" Siekierka
-
-does not support filters, which is a real shame
+Copyright (c) 2019 Ben "GreaseMonkey" Russell
 */
+#include <assert.h>
 #include <getopt.h>
+#include <stdbool.h>
 #include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -20,14 +21,22 @@ does not support filters, which is a real shame
 #define FORMAT_XA 0
 #define FORMAT_SPU 1
 
+#define ADPCM_FILTER_COUNT 5
+#define XA_ADPCM_FILTER_COUNT 4
+#define SPU_ADPCM_FILTER_COUNT 5
+
+const int16_t filter_k1[ADPCM_FILTER_COUNT] = {0, 60, 115, 98, 122};
+const int16_t filter_k2[ADPCM_FILTER_COUNT] = {0, 0, -52, -55, -60};
+
 typedef struct {
-	int qerr;
-	int16_t prev, prev2;
+	int qerr; // quanitisation error
+	uint64_t mse; // mean square error
+	int prev1, prev2;
 } encoder_state_t;
 
 typedef struct {
 	int format; // FORMAT_XA or FORMAT_SPU
-	int stereo; // 0 or 1
+	bool stereo; // false or true
 	int frequency; // 18900 or 37800 Hz
 	int bits_per_sample; // 4 or 8
 	int file_number; // 00-FF
@@ -122,7 +131,9 @@ int16_t *load_samples(const char *filename, int *sample_count, settings_t *setti
 
 	while (av_read_frame(format, &packet) >= 0) {
 		if (decode_frame(codec, frame, &frame_size, &packet)) {
-			buffer[0] = malloc(sizeof(int16_t) * sample_count_mul * swr_get_out_samples(resampler, frame->nb_samples));
+			size_t buffer_size = sizeof(int16_t) * sample_count_mul * swr_get_out_samples(resampler, frame->nb_samples);
+			buffer[0] = malloc(buffer_size);
+			memset(buffer[0], 0, buffer_size);
 			frame_sample_count = swr_convert(resampler, buffer, frame->nb_samples, (const uint8_t**)frame->data, frame->nb_samples);
 			out = realloc(out, (*sample_count + ((frame_sample_count + 4032) * sample_count_mul)) * sizeof(int16_t));
 			memmove(&out[*sample_count], buffer[0], sizeof(int16_t) * frame_sample_count * sample_count_mul);
@@ -156,62 +167,95 @@ static void init_sector_buffer(uint8_t *buffer, settings_t *settings) {
 	memcpy(buffer + 0x14, buffer + 0x10, 4);
 }
 
-int16_t filter_pos[4] = {0, 60, 115, 98};
-int16_t filter_neg[4] = {0, 0, -52, -55};
-
-uint8_t encode_nibbles(encoder_state_t *state, int16_t *samples, int pitch, uint8_t *data, int data_shift, int data_pitch) {
-	// TODO: implement a real encoder
+uint8_t attempt_to_encode_nibbles(encoder_state_t *outstate, const encoder_state_t *instate, int16_t *samples, int pitch, uint8_t *data, int data_shift, int data_pitch, int filter, int sample_shift) {
 	uint8_t nondata_mask = ~(0x0F << data_shift);
-	int min_shift = 12, curr_shift;
-	int i;
-	int sample;
-	uint8_t sample_enc;
-	uint8_t hdr = 0;
-	int16_t sample_dec;
-	int s_min, s_max;
+	int min_shift = sample_shift;
+	int k1 = filter_k1[filter];
+	int k2 = filter_k2[filter];
 
-	for (i = 0; i < 28; i++) {
-		sample = samples[i * pitch];
-		if (sample == 0 || sample == -1) continue;
-		if (sample < 0) sample = (~sample); // works for clz
+	uint8_t hdr = (min_shift & 0x0F) | (filter << 4);
 
-		curr_shift = __builtin_clz(sample) - 17;
-		if (min_shift > curr_shift) min_shift = curr_shift;
+	if (outstate != instate) {
+		memcpy(outstate, instate, sizeof(encoder_state_t));
 	}
 
-	hdr = min_shift & 0x0F;
+	outstate->mse = 0;
 
-	s_min = ((-8) << 12) >> min_shift;
-	s_max = ((7) << 12) >> min_shift;
+	for (int i = 0; i < 28; i++) {
+		int64_t best_sample_error = 1<<30;
+		int best_sample_enc = 0;
+		int best_sample_dec = 0;
+		int sample_dec;
 
-	for (i = 0; i < 28; i++) {
-		sample = samples[i * pitch] + (state->qerr);
-		if (sample < s_min) sample = s_min;
-		else if (sample > s_max) sample = s_max;
+		for (int sample_enc = 0; sample_enc < 0x10; sample_enc++) {
+			sample_dec = (int16_t) (sample_enc << 12);
+			sample_dec >>= min_shift;
+			sample_dec += (k1*outstate->prev1 + k2*outstate->prev2 + (1<<5))>>6;
+			if (sample_dec > +0x7FFF) { sample_dec = +0x7FFF; }
+			if (sample_dec < -0x8000) { sample_dec = -0x8000; }
+			int sample = samples[i * pitch];
+			sample += outstate->qerr;
+			int64_t sample_error = sample_dec - sample;
+			if (abs(best_sample_error) > abs(sample_error)) {
+				best_sample_error = sample_error;
+				best_sample_enc = sample_enc;
+				best_sample_dec = sample_dec;
+			}
+		}
 
-		if (min_shift < 12) sample += (1 << (11 - min_shift));
-		sample_enc = (sample >> (12 - min_shift)) & 0x0F;
-		data[i * data_pitch] = (data[i * data_pitch] & nondata_mask) | sample_enc << data_shift;
-		sample_dec = ((int16_t) (sample_enc << 12)) >> min_shift;
-		state->qerr += samples[i * pitch] - sample_dec;
+		assert(best_sample_error < (1<<30));
+		assert(best_sample_error > -(1<<30));
+		data[i * data_pitch] = (data[i * data_pitch] & nondata_mask) | (best_sample_enc << data_shift);
+		outstate->qerr = best_sample_error;
+		outstate->mse += ((uint64_t)best_sample_error) * (uint64_t)best_sample_error;
 
-		state->prev = sample_dec;
-		state->prev2 = state->prev;
+		outstate->prev2 = outstate->prev1;
+		outstate->prev1 = best_sample_dec;
 	}
 
 	return hdr;
+}
+
+uint8_t encode_nibbles(encoder_state_t *state, int16_t *samples, int pitch, uint8_t *data, int data_shift, int data_pitch, int filter_count) {
+	encoder_state_t proposed;
+	int64_t best_mse = ((int64_t)1<<(int64_t)50);
+	int best_filter = 0;
+	int best_sample_shift = 0;
+
+	for (int sample_shift = 0; sample_shift <= 12; sample_shift++) {
+		for (int filter = 0; filter < filter_count; filter++) {
+			// ignore header here
+			attempt_to_encode_nibbles(
+				&proposed, state,
+				samples, pitch,
+				data, data_shift, data_pitch,
+				filter, sample_shift);
+
+			if (best_mse > proposed.mse) {
+				best_mse = proposed.mse;
+				best_filter = filter;
+				best_sample_shift = sample_shift;
+			}
+		}
+	}
+
+	// now go with the encoder
+	return attempt_to_encode_nibbles(
+		state, state,
+		samples, pitch,
+		data, data_shift, data_pitch,
+		best_filter, best_sample_shift);
 }
 
 void encode_file_spu(int16_t *samples, int sample_count, settings_t *settings, FILE *output) {
 	uint8_t prebuf[28];
 	uint8_t buffer[16];
 	uint8_t *data;
-	int i, j = 0;
 
-	for (i = 0; i < sample_count; i += 28) {
-		buffer[0] = encode_nibbles(&(settings->state_left), samples + i, 1, prebuf, 0, 1);
-		for (j = 0; j < 28; j+=2) {
-			buffer[2 + (j>>1)] = prebuf[j] | (prebuf[j+1] << 4);
+	for (int i = 0; i < sample_count; i += 28) {
+		buffer[0] = encode_nibbles(&(settings->state_left), samples + i, 1, prebuf, 0, 1, SPU_ADPCM_FILTER_COUNT);
+		for (int j = 0; j < 28; j+=2) {
+			buffer[2 + (j>>1)] = (prebuf[j] & 0x0F) | (prebuf[j+1] << 4);
 		}
 
 		buffer[1] = 0;
@@ -225,23 +269,23 @@ void encode_file_spu(int16_t *samples, int sample_count, settings_t *settings, F
 void encode_block_xa(int16_t *samples, uint8_t *data, settings_t *settings) {
 	if (settings->bits_per_sample == 4) {
 		if (settings->stereo) {
-			data[0]  = encode_nibbles(&(settings->state_left), samples,            2, data + 0x10, 0, 4);
-			data[1]  = encode_nibbles(&(settings->state_right), samples + 1,        2, data + 0x10, 4, 4);
-			data[2]  = encode_nibbles(&(settings->state_left), samples + 56,       2, data + 0x11, 0, 4);
-			data[3]  = encode_nibbles(&(settings->state_right), samples + 56 + 1,   2, data + 0x11, 4, 4);
-			data[8]  = encode_nibbles(&(settings->state_left), samples + 56*2,     2, data + 0x12, 0, 4);
-			data[9]  = encode_nibbles(&(settings->state_right), samples + 56*2 + 1, 2, data + 0x12, 4, 4);
-			data[10] = encode_nibbles(&(settings->state_left), samples + 56*3,     2, data + 0x13, 0, 4);
-			data[11] = encode_nibbles(&(settings->state_right), samples + 56*3 + 1, 2, data + 0x13, 4, 4);
+			data[0]  = encode_nibbles(&(settings->state_left), samples,            2, data + 0x10, 0, 4, XA_ADPCM_FILTER_COUNT);
+			data[1]  = encode_nibbles(&(settings->state_right), samples + 1,        2, data + 0x10, 4, 4, XA_ADPCM_FILTER_COUNT);
+			data[2]  = encode_nibbles(&(settings->state_left), samples + 56,       2, data + 0x11, 0, 4, XA_ADPCM_FILTER_COUNT);
+			data[3]  = encode_nibbles(&(settings->state_right), samples + 56 + 1,   2, data + 0x11, 4, 4, XA_ADPCM_FILTER_COUNT);
+			data[8]  = encode_nibbles(&(settings->state_left), samples + 56*2,     2, data + 0x12, 0, 4, XA_ADPCM_FILTER_COUNT);
+			data[9]  = encode_nibbles(&(settings->state_right), samples + 56*2 + 1, 2, data + 0x12, 4, 4, XA_ADPCM_FILTER_COUNT);
+			data[10] = encode_nibbles(&(settings->state_left), samples + 56*3,     2, data + 0x13, 0, 4, XA_ADPCM_FILTER_COUNT);
+			data[11] = encode_nibbles(&(settings->state_right), samples + 56*3 + 1, 2, data + 0x13, 4, 4, XA_ADPCM_FILTER_COUNT);
 		} else {
-			data[0]  = encode_nibbles(&(settings->state_left), samples,            1, data + 0x10, 0, 4);
-			data[1]  = encode_nibbles(&(settings->state_right), samples + 28,       1, data + 0x10, 4, 4);
-			data[2]  = encode_nibbles(&(settings->state_left), samples + 28*2,     1, data + 0x11, 0, 4);
-			data[3]  = encode_nibbles(&(settings->state_right), samples + 28*3,     1, data + 0x11, 4, 4);
-			data[8]  = encode_nibbles(&(settings->state_left), samples + 28*4,     1, data + 0x12, 0, 4);
-			data[9]  = encode_nibbles(&(settings->state_right), samples + 28*5,     1, data + 0x12, 4, 4);
-			data[10] = encode_nibbles(&(settings->state_left), samples + 28*6,     1, data + 0x13, 0, 4);
-			data[11] = encode_nibbles(&(settings->state_right), samples + 28*7,     1, data + 0x13, 4, 4);
+			data[0]  = encode_nibbles(&(settings->state_left), samples,            1, data + 0x10, 0, 4, XA_ADPCM_FILTER_COUNT);
+			data[1]  = encode_nibbles(&(settings->state_right), samples + 28,       1, data + 0x10, 4, 4, XA_ADPCM_FILTER_COUNT);
+			data[2]  = encode_nibbles(&(settings->state_left), samples + 28*2,     1, data + 0x11, 0, 4, XA_ADPCM_FILTER_COUNT);
+			data[3]  = encode_nibbles(&(settings->state_right), samples + 28*3,     1, data + 0x11, 4, 4, XA_ADPCM_FILTER_COUNT);
+			data[8]  = encode_nibbles(&(settings->state_left), samples + 28*4,     1, data + 0x12, 0, 4, XA_ADPCM_FILTER_COUNT);
+			data[9]  = encode_nibbles(&(settings->state_right), samples + 28*5,     1, data + 0x12, 4, 4, XA_ADPCM_FILTER_COUNT);
+			data[10] = encode_nibbles(&(settings->state_left), samples + 28*6,     1, data + 0x13, 0, 4, XA_ADPCM_FILTER_COUNT);
+			data[11] = encode_nibbles(&(settings->state_right), samples + 28*7,     1, data + 0x13, 4, 4, XA_ADPCM_FILTER_COUNT);
 		}
 	} else {
 /*		if (settings->stereo) {
@@ -337,7 +381,7 @@ int parse_args(settings_t* settings, int argc, char** argv) {
 					fprintf(stderr, "Invalid channel count: %d\n", ch);
 					return -1;
 				}
-				settings->stereo = ch == 2 ? 1 : 0;
+				settings->stereo = (ch == 2 ? 1 : 0);
 			} break;
 			case 'F': {
 				settings->file_number = atoi(optarg);
@@ -369,7 +413,7 @@ int parse_args(settings_t* settings, int argc, char** argv) {
 	}
 
 	if (settings->format == FORMAT_SPU) {
-		settings->stereo = 0;
+		settings->stereo = false;
 	}
 
 	return optind;
@@ -385,7 +429,7 @@ int main(int argc, char **argv) {
 
 	settings.file_number = 0;
 	settings.channel_number = 0;
-	settings.stereo = 1;
+	settings.stereo = true;
 	settings.frequency = FREQ_DOUBLE;
 	settings.bits_per_sample = 4;
 
