@@ -82,8 +82,8 @@
 #define PSXREG_CDROM_I1_INTFLG (*(volatile uint8_t *)(PSX_IOBASE + 0x1803))
 #define PSXREG_CDROM_I2_VOL_LL (*(volatile uint8_t *)(PSX_IOBASE + 0x1802))
 #define PSXREG_CDROM_I2_VOL_LR (*(volatile uint8_t *)(PSX_IOBASE + 0x1803))
-#define PSXREG_CDROM_I3_VOL_RL (*(volatile uint8_t *)(PSX_IOBASE + 0x1801))
-#define PSXREG_CDROM_I3_VOL_RR (*(volatile uint8_t *)(PSX_IOBASE + 0x1802))
+#define PSXREG_CDROM_I3_VOL_RR (*(volatile uint8_t *)(PSX_IOBASE + 0x1801))
+#define PSXREG_CDROM_I3_VOL_RL (*(volatile uint8_t *)(PSX_IOBASE + 0x1802))
 #define PSXREG_CDROM_I3_VOLCTL (*(volatile uint8_t *)(PSX_IOBASE + 0x1803))
 #define PSXREG_CDROM_I2_SMAP_W (*(volatile uint8_t *)(PSX_IOBASE + 0x1801))
 
