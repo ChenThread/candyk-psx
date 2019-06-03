@@ -45,6 +45,7 @@ int seedy_poll_interrupt_blocking(void)
 	}
 	int result = (PSXREG_CDROM_I1_INTFLG & 0x07);
 	PSXREG_CDROM_I1_INTFLG = 0x47;
+	PSXREG_CDROM_In_IDXSR = 0x00;
 	return result;
 }
 
@@ -52,19 +53,20 @@ void seedy_ack_main_interrupt(void)
 {
 	PSXREG_CDROM_In_IDXSR = 0x01;
 	PSXREG_CDROM_I1_INTFLG = 0x1F;
+	PSXREG_CDROM_In_IDXSR = 0x00;
 }
 
 void seedy_write_command(int b)
 {
 	//seedy_wait_until_ready();
-	//PSXREG_CDROM_In_IDXSR = 0x00;
+	PSXREG_CDROM_In_IDXSR = 0x00;
 	PSXREG_CDROM_I0_CMD = b;
 }
 
 void seedy_write_param(int b)
 {
 	//seedy_wait_until_ready();
-	//PSXREG_CDROM_In_IDXSR = 0x00;
+	PSXREG_CDROM_In_IDXSR = 0x00;
 	PSXREG_CDROM_I0_PARAMS = b;
 	//seedy_wait_until_ready();
 }
@@ -78,8 +80,8 @@ int seedy_read_response(void)
 void seedy_start_command(void)
 {
 	seedy_wait_until_ready();
-	//while((PSXREG_CDROM_In_IDXSR & 0x40) != 0) { volatile int k = PSXREG_CDROM_In_DATA_R; }
-	//while((PSXREG_CDROM_In_IDXSR & 0x20) != 0) { volatile int k = seedy_read_response(); }
+	while((PSXREG_CDROM_In_IDXSR & 0x40) != 0) { volatile int k = PSXREG_CDROM_In_DATA_R; }
+	while((PSXREG_CDROM_In_IDXSR & 0x20) != 0) { volatile int k = seedy_read_response(); }
 	PSXREG_CDROM_In_IDXSR = 0x01;
 	PSXREG_CDROM_I1_INTFLG = 0x1F;
 	PSXREG_CDROM_In_IDXSR = 0x00;
@@ -272,6 +274,13 @@ void seedy_isr_cdrom(void)
 // Helpers
 //
 
+static void seedy_ack(void)
+{
+	int init_isr1 = seedy_poll_interrupt_blocking();
+	int init_val1 = seedy_read_response();
+	seedy_ack_main_interrupt();
+}
+
 static void seedy_setloc_lba(int lba)
 {
 	{
@@ -307,7 +316,6 @@ int seedy_is_xa_playing(void)
 
 void seedy_stop_xa(void)
 {
-	seedy_wait_until_ready();
 	PSXREG_CDROM_In_IDXSR = 0x02;
 	PSXREG_CDROM_I2_VOL_LL = 0x00;
 	PSXREG_CDROM_I2_VOL_LR = 0x00;
@@ -317,14 +325,12 @@ void seedy_stop_xa(void)
 	PSXREG_CDROM_I3_VOLCTL = 1;
 	PSXREG_CDROM_In_IDXSR = 0x00;
 
-	seedy_send_cmd_mute();
-	seedy_send_cmd_stop();
+	seedy_send_cmd_pause();
+	seedy_ack();
 }
 
 void seedy_read_xa(int lba, int flags, int file, int channel)
 {
-	seedy_wait_until_ready();
-
 	PSXREG_CDROM_In_IDXSR = 0x03;
 	PSXREG_CDROM_I3_VOLCTL = 1;
 	PSXREG_CDROM_I3_VOL_RL = 0x00;
@@ -340,17 +346,17 @@ void seedy_read_xa(int lba, int flags, int file, int channel)
 	PSXREG_CDROM_I2_VOL_LR = 0x00;
 	PSXREG_CDROM_In_IDXSR = 0x00;
 
-	seedy_send_cmd_stop();
-	seedy_send_cmd_demute();
 	seedy_send_cmd_setfilter(file, channel);
+	seedy_ack();
 	seedy_send_cmd_setmode(
 		(!(flags & SEEDY_READ_SINGLE_SPEED) ? 0x80 : 0)
 		| 0x48
 	);
+	seedy_ack();
 	seedy_setloc_lba(lba);
 	seedy_send_cmd_reads();
+	seedy_ack();
 
-	seedy_wait_until_ready();
 	PSXREG_CDROM_In_IDXSR = 0x03;
 	PSXREG_CDROM_I3_VOLCTL = 0;
 	PSXREG_CDROM_In_IDXSR = 0x00;
@@ -365,6 +371,7 @@ int seedy_read_data_sync(int lba, int flags, uint8_t *buffer, int size)
 		(!(flags & SEEDY_READ_SINGLE_SPEED) ? 0x80 : 0)
 		| ((flags & SEEDY_READ_WHOLE_SECTORS) ? 0x20 : 0)
 	);
+	seedy_ack();
 	seedy_setloc_lba(lba);
 
 	{
