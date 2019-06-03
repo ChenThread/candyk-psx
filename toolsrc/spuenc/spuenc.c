@@ -347,6 +347,21 @@ void encode_block_xa(int16_t *samples, uint8_t *data, settings_t *settings) {
 	}
 }
 
+void calculate_edc_xa(uint8_t *buffer)
+{
+	uint32_t edc = 0;
+	for (int i = 0x010; i < 0x92C; i++) {
+		edc ^= 0xFF&(uint32_t)buffer[i];
+		for (int ibit = 0; ibit < 8; ibit++) {
+			edc = (edc>>1)^(0xD8018001*(edc&0x1));
+		}
+	}
+	buffer[0x92C] = (uint8_t)(edc);
+	buffer[0x92D] = (uint8_t)(edc >> 8);
+	buffer[0x92E] = (uint8_t)(edc >> 16);
+	buffer[0x92F] = (uint8_t)(edc >> 24);
+}
+
 #define WRITE_BUFFER() \
 	if (settings->format == FORMAT_XACD) { \
 		fwrite(buffer, 2352, 1, output); \
@@ -377,6 +392,7 @@ void encode_file_xa(int16_t *samples, int sample_count, settings_t *settings, FI
 		}
 
 		if ((++j) == 18) {
+			calculate_edc_xa(buffer);
 			WRITE_BUFFER();
 			j = 0;
 		}
@@ -384,6 +400,7 @@ void encode_file_xa(int16_t *samples, int sample_count, settings_t *settings, FI
 
 	// write final sector
 	if (j > 0) {
+		calculate_edc_xa(buffer);
 		WRITE_BUFFER();
 	}
 }
