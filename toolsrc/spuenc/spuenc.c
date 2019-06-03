@@ -19,7 +19,8 @@ Copyright (c) 2019 Ben "GreaseMonkey" Russell
 #define FREQ_SINGLE 18900
 #define FREQ_DOUBLE 37800
 #define FORMAT_XA 0
-#define FORMAT_SPU 1
+#define FORMAT_XACD 1
+#define FORMAT_SPU 2
 
 #define ADPCM_FILTER_COUNT 5
 #define XA_ADPCM_FILTER_COUNT 4
@@ -35,7 +36,7 @@ typedef struct {
 } encoder_state_t;
 
 typedef struct {
-	int format; // FORMAT_XA or FORMAT_SPU
+	int format; // FORMAT_XA, FORMAT_XACD or FORMAT_SPU
 	bool stereo; // false or true
 	int frequency; // 18900 or 37800 Hz
 	int bits_per_sample; // 4 or 8
@@ -346,8 +347,12 @@ void encode_block_xa(int16_t *samples, uint8_t *data, settings_t *settings) {
 	}
 }
 
-//#define WRITE_BUFFER() fwrite(buffer, 2352, 1, output)
-#define WRITE_BUFFER() fwrite(buffer + 0x010, 2336, 1, output)
+#define WRITE_BUFFER() \
+	if (settings->format == FORMAT_XACD) { \
+		fwrite(buffer, 2352, 1, output); \
+	} else { \
+		fwrite(buffer + 0x010, 2336, 1, output); \
+	}
 
 void encode_file_xa(int16_t *samples, int sample_count, settings_t *settings, FILE *output) {
 	uint8_t buffer[2352];
@@ -385,14 +390,15 @@ void encode_file_xa(int16_t *samples, int sample_count, settings_t *settings, FI
 
 void print_help() {
 	printf("Usage: spuenc [-f freq] [-b bitdepth] [-c channels] [-F num] [-C num] [-t xa|spu] <in> <out>\n\n");
-	printf("    -f freq        Use specified frequency\n");
-	printf("    -t xa|spu      Use specified output type:\n");
-	printf("                     xa    .xa 2336-byte sectors\n");
-	printf("                     spu   raw SPU-ADPCM data\n");
-	printf("    -b bitdepth    Use specified bit depth (only 4 bits supported)\n");
-	printf("    -c channels    Use specified channel count (1 or 2)\n");
-	printf("    -F num         [.xa] Set the file number to num (0-255)\n");
-	printf("    -C num         [.xa] Set the channel number to num (0-31)\n");
+	printf("    -f freq          Use specified frequency\n");
+	printf("    -t xa|xacd|spu   Use specified output type:\n");
+	printf("                       xa     .xa 2336-byte sectors\n");
+	printf("                       xacd   .xa 2352-byte sectors\n");
+	printf("                       spu    raw SPU-ADPCM data\n");
+	printf("    -b bitdepth      Use specified bit depth (only 4 bits supported)\n");
+	printf("    -c channels      Use specified channel count (1 or 2)\n");
+	printf("    -F num           [.xa] Set the file number to num (0-255)\n");
+	printf("    -C num           [.xa] Set the channel number to num (0-31)\n");
 }
 
 int parse_args(settings_t* settings, int argc, char** argv) {
@@ -402,6 +408,8 @@ int parse_args(settings_t* settings, int argc, char** argv) {
 			case 't': {
 				if (strcmp(optarg, "xa") == 0) {
 					settings->format = FORMAT_XA;
+				} else if (strcmp(optarg, "xaraw") == 0) {
+					settings->format = FORMAT_XACD;
 				} else if (strcmp(optarg, "spu") == 0) {
 					settings->format = FORMAT_SPU;
 				} else {
@@ -449,7 +457,7 @@ int parse_args(settings_t* settings, int argc, char** argv) {
 		}
 	}
 
-	if (settings->format == FORMAT_XA) {
+	if (settings->format == FORMAT_XA || settings->format == FORMAT_XACD) {
 		if (settings->frequency != FREQ_SINGLE && settings->frequency != FREQ_DOUBLE) {
 			fprintf(stderr, "Invalid frequency: %d Hz\n", settings->frequency);
 			return -1;
@@ -507,6 +515,7 @@ int main(int argc, char **argv) {
 
 	switch (settings.format) {
 		case FORMAT_XA:
+		case FORMAT_XACD:
 			encode_file_xa(buffer, sample_count, &settings, output);
 			break;
 		case FORMAT_SPU:
