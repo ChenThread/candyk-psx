@@ -156,15 +156,16 @@ int16_t *load_samples(const char *filename, int *sample_count, settings_t *setti
 
 static void init_sector_buffer(uint8_t *buffer, settings_t *settings) {
 	memset(buffer,0,2352);
-	buffer[0x0F] = 0x02;
-	buffer[0x10] = settings->file_number;
-	buffer[0x11] = settings->channel_number & 0x1F;
-	buffer[0x12] = 0x24 | 0x40;
-	buffer[0x13] =
+	memset(buffer+0x001,0xFF,10);
+	buffer[0x00F] = 0x02;
+	buffer[0x010] = settings->file_number;
+	buffer[0x011] = settings->channel_number & 0x1F;
+	buffer[0x012] = 0x24 | 0x40;
+	buffer[0x013] =
 		(settings->stereo ? 1 : 0)
 		| (settings->frequency >= FREQ_DOUBLE ? 0 : 4)
 		| (settings->bits_per_sample >= 8 ? 16 : 0);
-	memcpy(buffer + 0x14, buffer + 0x10, 4);
+	memcpy(buffer + 0x014, buffer + 0x010, 4);
 }
 
 uint8_t attempt_to_encode_nibbles(encoder_state_t *outstate, const encoder_state_t *instate, int16_t *samples, int pitch, uint8_t *data, int data_shift, int data_pitch, int filter, int sample_shift) {
@@ -183,30 +184,62 @@ uint8_t attempt_to_encode_nibbles(encoder_state_t *outstate, const encoder_state
 
 	for (int i = 0; i < 28; i++) {
 		int64_t best_sample_error = 1<<30;
-		int best_sample_enc = 0;
-		int best_sample_dec = 0;
-		int sample_dec;
+		int32_t best_sample_enc = 0;
+		int32_t best_sample_dec = 0;
+		int32_t sample_dec;
+		int32_t sample = samples[i * pitch] + outstate->qerr;
+		int32_t previous_values = (k1*outstate->prev1 + k2*outstate->prev2 + (1<<5))>>6;
+		int32_t proposed_sample_enc = sample - previous_values;
+		proposed_sample_enc <<= min_shift;
+		proposed_sample_enc += (1<<(12-1));
+		proposed_sample_enc >>= 12;
+		if(proposed_sample_enc < -8) { proposed_sample_enc = -8; }
+		if(proposed_sample_enc > +7) { proposed_sample_enc = +7; }
+		proposed_sample_enc &= 0xF;
 
-		for (int sample_enc = 0; sample_enc < 0x10; sample_enc++) {
-			sample_dec = (int16_t) (sample_enc << 12);
+#if 1
+		// Direct solution
+		sample_dec = (int16_t) ((proposed_sample_enc&0xF) << 12);
+		sample_dec >>= min_shift;
+		sample_dec += previous_values;
+		if (sample_dec > +0x7FFF) { sample_dec = +0x7FFF; }
+		if (sample_dec < -0x8000) { sample_dec = -0x8000; }
+		int64_t sample_error = sample_dec - sample;
+		best_sample_error = sample_error;
+		best_sample_enc = proposed_sample_enc&0xF;
+		best_sample_dec = sample_dec;
+
+		assert(best_sample_error < (1<<30));
+		assert(best_sample_error > -(1<<30));
+
+#else
+		// Brute-force version for reference
+		for (int sample_enc = 0x7; sample_enc >= -0x8; sample_enc--) {
+			sample_dec = (int16_t) ((sample_enc&0xF) << 12);
 			sample_dec >>= min_shift;
-			sample_dec += (k1*outstate->prev1 + k2*outstate->prev2 + (1<<5))>>6;
+			sample_dec += previous_values;
 			if (sample_dec > +0x7FFF) { sample_dec = +0x7FFF; }
 			if (sample_dec < -0x8000) { sample_dec = -0x8000; }
-			int sample = samples[i * pitch];
-			sample += outstate->qerr;
 			int64_t sample_error = sample_dec - sample;
-			if (abs(best_sample_error) > abs(sample_error)) {
+			if (abs(best_sample_error) > abs(sample_error) || (sample_dec >= +0x7FFF && abs(best_sample_error) == abs(sample_error))) {
 				best_sample_error = sample_error;
-				best_sample_enc = sample_enc;
+				best_sample_enc = sample_enc&0xF;
 				best_sample_dec = sample_dec;
 			}
 		}
 
+		// Sometimes this is off by one value when it clips.
+		if (proposed_sample_enc != best_sample_enc && best_sample_dec != +0x7FFF && best_sample_dec != -0x8000) {
+			printf("p=%X b=%X s=%X d=%04X 1=%04X 2=%04X +=%04X\n", proposed_sample_enc, best_sample_enc, min_shift, 0xFFFF&best_sample_dec, outstate->prev1&0xFFFF, outstate->prev2&0xFFFF, previous_values&0xFFFF);
+		}
+		//assert(proposed_sample_enc == best_sample_enc);
+
 		assert(best_sample_error < (1<<30));
 		assert(best_sample_error > -(1<<30));
+#endif
+
 		data[i * data_pitch] = (data[i * data_pitch] & nondata_mask) | (best_sample_enc << data_shift);
-		outstate->qerr = best_sample_error;
+		outstate->qerr += best_sample_error;
 		outstate->mse += ((uint64_t)best_sample_error) * (uint64_t)best_sample_error;
 
 		outstate->prev2 = outstate->prev1;
@@ -303,7 +336,7 @@ void encode_block_xa(int16_t *samples, uint8_t *data, settings_t *settings) {
 }
 
 //#define WRITE_BUFFER() fwrite(buffer, 2352, 1, output)
-#define WRITE_BUFFER() fwrite(buffer + 0x10, 2336, 1, output)
+#define WRITE_BUFFER() fwrite(buffer + 0x010, 2336, 1, output)
 
 void encode_file_xa(int16_t *samples, int sample_count, settings_t *settings, FILE *output) {
 	uint8_t buffer[2352];
