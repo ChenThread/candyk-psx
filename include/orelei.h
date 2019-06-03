@@ -15,6 +15,10 @@ void orelei_pack_spu(uint8_t *outbuf, const int16_t *inbuf, int16_t *pred1, int1
 
 void orelei_init_spu(void);
 
+// orelei.c - cd audio
+void orelei_open_cd_audio(int voll, int volr);
+void orelei_close_cd_audio();
+
 // midi.c
 #define ORELEI_MIDI_MASTER_COUNT 16
 #define ORELEI_MIDI_MAX_TRACKS 32

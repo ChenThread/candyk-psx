@@ -149,6 +149,25 @@ void orelei_pack_spu(uint8_t *outbuf, const int16_t *inbuf, int16_t *pred1, int1
 	}
 }
 
+void orelei_open_cd_audio(int voll, int volr)
+{
+	int volboth = (voll & 0xFFFF) | (volr<<16);
+	TWICE(PSXREG_SPU_CDVOL = volboth);
+	spu_cnt_shadow |= 1;
+	TWICE(PSXREG_SPU_CNT = spu_cnt_shadow);
+	while((PSXREG_SPU_STAT & 0x3F) != (spu_cnt_shadow & 0x3F)) {
+	}
+}
+
+void orelei_close_cd_audio()
+{
+	TWICE(PSXREG_SPU_CDVOL = 0);
+	spu_cnt_shadow &= ~1;
+	TWICE(PSXREG_SPU_CNT = spu_cnt_shadow);
+	while((PSXREG_SPU_STAT & 0x3F) != (spu_cnt_shadow & 0x3F)) {
+	}
+}
+
 void orelei_init_spu(void)
 {
 	for(int i = 0; i < SPU_CHANNEL_COUNT; i++) {

@@ -300,6 +300,62 @@ static void seedy_setloc_lba(int lba)
 	}
 }
 
+int seedy_is_xa_playing(void)
+{
+	return ((PSXREG_CDROM_I1_INTFLG >> 2) & 0x01);
+}
+
+void seedy_stop_xa(void)
+{
+	seedy_wait_until_ready();
+	PSXREG_CDROM_In_IDXSR = 0x02;
+	PSXREG_CDROM_I2_VOL_LL = 0x00;
+	PSXREG_CDROM_I2_VOL_LR = 0x00;
+	PSXREG_CDROM_In_IDXSR = 0x03;
+	PSXREG_CDROM_I3_VOL_RL = 0x00;
+	PSXREG_CDROM_I3_VOL_RR = 0x00;
+	PSXREG_CDROM_I3_VOLCTL = 1;
+	PSXREG_CDROM_In_IDXSR = 0x00;
+
+	seedy_send_cmd_mute();
+	seedy_send_cmd_stop();
+}
+
+void seedy_read_xa(int lba, int flags, int file, int channel)
+{
+	seedy_wait_until_ready();
+
+	PSXREG_CDROM_In_IDXSR = 0x03;
+	PSXREG_CDROM_I3_VOLCTL = 1;
+	PSXREG_CDROM_I3_VOL_RL = 0x00;
+	PSXREG_CDROM_I3_VOL_RR = 0x80;
+	PSXREG_CDROM_In_IDXSR = 0x02;
+	PSXREG_CDROM_I2_SMAP_W = (
+		((flags & SEEDY_PLAY_XA_STEREO) ? 0x01 : 0)
+		| ((flags & SEEDY_PLAY_XA_18900) ? 0x04 : 0)
+		| ((flags & SEEDY_PLAY_XA_8BIT) ? 0x10 : 0)
+		| ((flags & SEEDY_PLAY_XA_EMPHASIS) ? 0x40 : 0)
+	);
+	PSXREG_CDROM_I2_VOL_LL = 0x80;
+	PSXREG_CDROM_I2_VOL_LR = 0x00;
+	PSXREG_CDROM_In_IDXSR = 0x00;
+
+	seedy_send_cmd_stop();
+	seedy_send_cmd_demute();
+	seedy_send_cmd_setfilter(file, channel);
+	seedy_send_cmd_setmode(
+		(!(flags & SEEDY_READ_SINGLE_SPEED) ? 0x80 : 0)
+		| 0x48
+	);
+	seedy_setloc_lba(lba);
+	seedy_send_cmd_reads();
+
+	seedy_wait_until_ready();
+	PSXREG_CDROM_In_IDXSR = 0x03;
+	PSXREG_CDROM_I3_VOLCTL = 0;
+	PSXREG_CDROM_In_IDXSR = 0x00;
+}
+
 int seedy_read_data_sync(int lba, int flags, uint8_t *buffer, int size)
 {
 	int bufpos = 0;
