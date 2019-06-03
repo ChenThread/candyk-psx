@@ -168,6 +168,41 @@ static void init_sector_buffer(uint8_t *buffer, settings_t *settings) {
 	memcpy(buffer + 0x014, buffer + 0x010, 4);
 }
 
+int find_min_shift(const encoder_state_t *state, int16_t *samples, int pitch, int filter) {
+	// Assumption made:
+	//
+	// There is value in shifting right one step further to allow the nibbles to clip.
+	// However, given a possible shift value, there is no value in shifting one step less.
+	//
+	// Having said that, this is not a completely accurate model of the encoder,
+	// so maybe we will need to shift one step less.
+	//
+	int prev1 = state->prev1;
+	int prev2 = state->prev2;
+	int k1 = filter_k1[filter];
+	int k2 = filter_k2[filter];
+
+	int right_shift = 0;
+
+	int32_t s_min = 0;
+	int32_t s_max = 0;
+	for (int i = 0; i < 28; i++) {
+		int32_t raw_sample = samples[i * pitch];
+		int32_t previous_values = (k1*prev1 + k2*prev2 + (1<<5))>>6;
+		int32_t sample = raw_sample - previous_values;
+		if (sample < s_min) { s_min = sample; }
+		if (sample > s_max) { s_max = sample; }
+		prev2 = prev1;
+		prev1 = raw_sample;
+	}
+	while(right_shift < 12 && (s_max>>right_shift) > +0x7) { right_shift += 1; };
+	while(right_shift < 12 && (s_min>>right_shift) < -0x8) { right_shift += 1; };
+
+	int min_shift = 12 - right_shift;
+	assert(0 <= min_shift && min_shift <= 12);
+	return min_shift;
+}
+
 uint8_t attempt_to_encode_nibbles(encoder_state_t *outstate, const encoder_state_t *instate, int16_t *samples, int pitch, uint8_t *data, int data_shift, int data_pitch, int filter, int sample_shift) {
 	uint8_t nondata_mask = ~(0x0F << data_shift);
 	int min_shift = sample_shift;
@@ -239,7 +274,8 @@ uint8_t attempt_to_encode_nibbles(encoder_state_t *outstate, const encoder_state
 #endif
 
 		data[i * data_pitch] = (data[i * data_pitch] & nondata_mask) | (best_sample_enc << data_shift);
-		outstate->qerr += best_sample_error;
+		// FIXME: dithering is hard to predict
+		//outstate->qerr += best_sample_error;
 		outstate->mse += ((uint64_t)best_sample_error) * (uint64_t)best_sample_error;
 
 		outstate->prev2 = outstate->prev1;
@@ -255,8 +291,18 @@ uint8_t encode_nibbles(encoder_state_t *state, int16_t *samples, int pitch, uint
 	int best_filter = 0;
 	int best_sample_shift = 0;
 
-	for (int sample_shift = 0; sample_shift <= 12; sample_shift++) {
-		for (int filter = 0; filter < filter_count; filter++) {
+	for (int filter = 0; filter < filter_count; filter++) {
+		int true_min_shift = find_min_shift(state, samples, pitch, filter);
+
+		// Testing has shown that the optimal shift can be off the true minimum shift
+		// by 1 in *either* direction.
+		// This is NOT the case when dither is used.
+		int min_shift = true_min_shift - 1;
+		int max_shift = true_min_shift + 1;
+		if (min_shift < 0) { min_shift = 0; }
+		if (max_shift > 12) { max_shift = 12; }
+
+		for (int sample_shift = min_shift; sample_shift <= max_shift; sample_shift++) {
 			// ignore header here
 			attempt_to_encode_nibbles(
 				&proposed, state,
