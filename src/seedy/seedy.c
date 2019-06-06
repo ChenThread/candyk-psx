@@ -274,11 +274,12 @@ void seedy_isr_cdrom(void)
 // Helpers
 //
 
-static void seedy_ack(void)
+static int seedy_ack(void)
 {
 	int init_isr1 = seedy_poll_interrupt_blocking();
 	int init_val1 = seedy_read_response();
 	seedy_ack_main_interrupt();
+	return init_val1;
 }
 
 static void seedy_setloc_lba(int lba)
@@ -307,6 +308,24 @@ static void seedy_setloc_lba(int lba)
 		}
 		seedy_ack_main_interrupt();
 	}
+}
+
+void seedy_drive_start(void)
+{
+	{
+		seedy_send_cmd_getstat();
+		int stat = seedy_ack();
+		if ((stat & 0x2) != 0) return;
+	}
+
+	{
+		seedy_send_cmd_init();
+	}
+}
+
+void seedy_drive_stop(void)
+{
+	seedy_send_cmd_stop();
 }
 
 int seedy_is_xa_playing(void)
