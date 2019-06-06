@@ -23,6 +23,9 @@ void seedy_stop_xa(void);
 
 int seedy_read_data_sync(int lba, int flags, uint8_t *buffer, int size);
 
+void seedy_drive_start(void);
+void seedy_drive_stop(void);
+
 void seedy_isr_cdrom(void);
 void seedy_init_cdrom(void);
 
