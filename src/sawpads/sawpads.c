@@ -61,8 +61,9 @@ static uint8_t sawpads_send(uint8_t data, bool wait_ack)
 	if(wait_ack) {
 		for(uint32_t i = 0; i < 0x44*100; i++) {
 			asm volatile ("");
-			if(sawpads_has_ack != 0) {
-				sawpads_has_ack--;
+			if((sawpads_has_ack>>1) != 0) {
+				sawpads_has_ack -= 2;
+				sawpads_has_ack &= ~0x01;
 				return PSXREG_JOY_DATA;
 			}
 		}
@@ -306,12 +307,12 @@ void sawpads_unlock_dualshock(void)
 
 void sawpads_isr_vblank(void)
 {
-	sawpads_has_ack++;
+	sawpads_has_ack += 1;
 }
 
 void sawpads_isr_joy(void)
 {
 	PSXREG_JOY_CTRL |= 0x0010; // ACK
-	sawpads_has_ack++;
+	sawpads_has_ack += 2;
 }
 
