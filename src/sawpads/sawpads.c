@@ -162,7 +162,7 @@ int32_t sawpads_read_card_sector(uint16_t address, uint8_t *buffer)
 			continue;
 		}
 
-		uint8_t result = sawpads_send(0x00, true);
+		uint8_t result = sawpads_send(0x00, false);
 		sawpads_stop_read();
 		switch (result) {
 			case 0x47:
@@ -212,7 +212,7 @@ int32_t sawpads_write_card_sector(uint16_t address, uint8_t *buffer)
 		sawpads_send(0x00, true); // ACK
 		sawpads_send(0x00, true); // ACK
 
-		uint8_t result = sawpads_send(0x00, true);
+		uint8_t result = sawpads_send(0x00, false);
 		sawpads_stop_read();
 		switch (result) {
 			case 0x47:
