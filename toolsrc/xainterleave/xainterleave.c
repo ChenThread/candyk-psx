@@ -123,8 +123,8 @@ int main(int argc, char** argv) {
 							memset(buffer, 0, 15);
 							buffer[15] = 0x02;
 						}
-						if (e->xa_file >= 0) buffer[16] = e->xa_file;
-						if (e->xa_channel >= 0) buffer[17] = e->xa_channel & 0x1F;
+						if (e->xa_file >= 0) buffer[0x010] = buffer[0x014] = e->xa_file;
+						if (e->xa_channel >= 0) buffer[0x011] = buffer[0x015] = e->xa_channel & 0x1F;
 						buffer[0x92F] = 0xFF; // make pscd-new generate EDC
 						fwrite(buffer, 2352, 1, output); break;
 				}
