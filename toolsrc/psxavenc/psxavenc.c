@@ -1,5 +1,5 @@
 /*
-spuenc: SPU/XA-ADPCM audio encoder
+psxavenc: MDEC video + SPU/XA-ADPCM audio encoder
 Copyright (c) 2019 Adrian "asie" Siekierka
 Copyright (c) 2019 Ben "GreaseMonkey" Russell
 */
@@ -115,7 +115,7 @@ int16_t *load_samples(const char *filename, int *sample_count, settings_t *setti
 }
 
 void print_help() {
-	printf("Usage: spuenc [-f freq] [-b bitdepth] [-c channels] [-F num] [-C num] [-t xa|spu] <in> <out>\n\n");
+	printf("Usage: psxavenc [-f freq] [-b bitdepth] [-c channels] [-F num] [-C num] [-t xa|spu] <in> <out>\n\n");
 	printf("    -f freq          Use specified frequency\n");
 	printf("    -t xa|xacd|spu   Use specified output type:\n");
 	printf("                       xa     .xa 2336-byte sectors\n");
