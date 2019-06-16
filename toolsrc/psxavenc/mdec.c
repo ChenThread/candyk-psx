@@ -191,40 +191,41 @@ static void encode_bits(vid_encoder_state_t *state, int bits, uint32_t val)
 	while(bits > state->bits_left) {
 		state->bits_value |= (uint16_t)((val<<state->bits_left)>>bits);
 		bits -= state->bits_left;
-		//val >>= state->bits_left;
+		val &= (1<<bits)-1;
 		flush_bits(state);
 	}
 
 	state->bits_value |= (uint16_t)((val<<state->bits_left)>>bits);
 	state->bits_left -= bits;
-	//val >>= bits;
 }
 
 static void encode_ac_value(vid_encoder_state_t *state, uint16_t value)
 {
 	assert(0 <= value && value <= 0xFFFF);
 
-	for(int i = 0; i < sizeof(huffman_lookup)/sizeof(huffman_lookup[0]); i++) {
+	// FIXME: this is busted
+	if(false) for(int i = 0; i < sizeof(huffman_lookup)/sizeof(huffman_lookup[0]); i++) {
 		if(value == huffman_lookup[i].u_hword_pos) {
+			printf("unescape + %04X %2d %04X\n", value, huffman_lookup[i].c_bits, huffman_lookup[i].c_value);
 			encode_bits(state, huffman_lookup[i].c_bits, huffman_lookup[i].c_value);
 			encode_bits(state, 1, 0);
 			return;
 		}
 		else if(value == huffman_lookup[i].u_hword_neg) {
+			printf("unescape - %04X %2d %04X\n", value, huffman_lookup[i].c_bits, huffman_lookup[i].c_value);
 			encode_bits(state, huffman_lookup[i].c_bits, huffman_lookup[i].c_value);
 			encode_bits(state, 1, 1);
 		}
 	}
 
 	// Use an escape
+	//printf("escape %04X\n", value);
 	encode_bits(state, 6, 0x01);
 	encode_bits(state, 16, value);
 }
 
-static void encode_dct_block(vid_encoder_state_t *state, int32_t *block, bool is_luma)
+static void transform_dct_block(vid_encoder_state_t *state, int32_t *block)
 {
-	int dc_value = 0;
-
 	// Apply DCT to block
 	int32_t midblock[8*8];
 
@@ -241,9 +242,29 @@ static void encode_dct_block(vid_encoder_state_t *state, int32_t *block, bool is
 		memcpy(block, midblock, sizeof(midblock));
 	}
 
+	// FIXME: Work out why the math has to go this way
+	block[0] /= 4;
 	for (int i = 0; i < 64; i++) {
-		//block[i] = (block[i] + quant_dec[i]*(8/2))/(quant_dec[i]*8);
-		block[i] = (block[i])/(quant_dec[i]*8);
+		// Finish reducing it
+		block[i] /= 8;
+
+		// If it's below the quantisation threshold, zero it
+		if(abs(block[i]) < quant_dec[i]) {
+			block[i] = 0;
+		}
+	}
+
+}
+
+static void encode_dct_block(vid_encoder_state_t *state, int32_t *block)
+{
+	int dc_value = 0;
+
+	for (int i = 0; i < 64; i++) {
+		// Quantise it
+		block[i] = (block[i])/quant_dec[i];
+
+		// Clamp it
 		if (block[i] < -0x200) { block[i] = -0x200; }
 		if (block[i] > +0x1FF) { block[i] = +0x1FF; }
 	}
@@ -252,45 +273,6 @@ static void encode_dct_block(vid_encoder_state_t *state, int32_t *block, bool is
 	dc_value = block[0];
 	//dc_value = 0;
 	encode_bits(state, 10, dc_value&0x3FF);
-
-	// Reduce so the damn thing can fit
-	{
-		const int max_nonzeroes = 2;
-		int nonzeroes = 0;
-		for (int i = 1; i < 64; i++) {
-			if (block[i] != 0) {
-				nonzeroes++;
-			}
-		}
-
-		if(nonzeroes > 0) {
-			// OK, find the largest of each
-			bool safe_block[8*8];
-			memset(safe_block, 0, sizeof(safe_block));
-			for(int reps = 0; reps < max_nonzeroes; reps++) {
-				int max_i = 1;
-				int max_v = -1;
-				for (int i = 1; i < 64; i++) {
-					if ((!safe_block[i]) && abs(block[i]) > max_v) {
-						max_v = abs(block[i]);
-						max_i = i;
-					}
-				}
-
-				if(max_v == -1) {
-					break;
-				}
-				safe_block[max_i] = true;
-			}
-
-			// Now clear the stuff that isn't big enough
-			for (int i = 1; i < 64; i++) {
-				if (!safe_block[i]) {
-					block[i] = 0;
-				}
-			}
-		}
-	}
 
 	// Build RLE output
 	uint16_t zero_rle_data[8*8];
@@ -322,6 +304,28 @@ static void encode_dct_block(vid_encoder_state_t *state, int32_t *block, bool is
 	state->uncomp_hwords_used = (state->uncomp_hwords_used+0xF)&~0xF;
 }
 
+static int reduce_dct_block(vid_encoder_state_t *state, int32_t *block, int32_t min_val, int *values_to_shed)
+{
+	// Reduce so it can all fit
+	int nonzeroes = 0;
+
+	for (int i = 1; i < 64; i++) {
+		//int ri = dct_zigzag_table[i];
+		if (block[i] != 0) {
+			//if (abs(block[i])+(ri>>3) < min_val+(64>>3)) {
+			if ((*values_to_shed) > 0 && abs(block[i]) < min_val*1) {
+				block[i] = 0;
+				(*values_to_shed)--;
+			} else {
+				nonzeroes++;
+			}
+		}
+	}
+
+	// Factor in DC + EOF values
+	return nonzeroes+2;
+}
+
 void encode_block_str(uint8_t *video_frames, int video_frame_count, uint8_t *output, settings_t *settings)
 {
 	uint8_t header[32];
@@ -331,6 +335,15 @@ void encode_block_str(uint8_t *video_frames, int video_frame_count, uint8_t *out
 		real_index = video_frame_count-1;
 	}
 	uint8_t *video_frame = video_frames + settings->video_width*settings->video_height*4*real_index;
+
+	if (settings->state_vid.dct_block_lists[0] == NULL) {
+		int dct_block_count_x = (settings->video_width+15)/16;
+		int dct_block_count_y = (settings->video_height+15)/16;
+		int dct_block_size = dct_block_count_x*dct_block_count_y*sizeof(int32_t)*8*8;
+		for (int i = 0; i < 6; i++) {
+			settings->state_vid.dct_block_lists[i] = malloc(dct_block_size);
+		}
+	}
 
 	memset(settings->state_vid.unmuxed, 0, sizeof(settings->state_vid.unmuxed));
 	memset(header, 0, sizeof(header));
@@ -344,11 +357,20 @@ void encode_block_str(uint8_t *video_frames, int video_frame_count, uint8_t *out
 	assert((settings->video_width % 16) == 0);
 	assert((settings->video_height % 16) == 0);
 
-	// TEST: Blank frames.
+	// Do the initial transform
 	for(int fx = 0; fx < settings->video_width; fx += 16) {
 	for(int fy = 0; fy < settings->video_height; fy += 16) {
 		// Order: Cr Cb [Y1|Y2\nY3|Y4]
-		int32_t blocks[6][8*8];
+		int block_offs = 8*8*((fy>>4)*((settings->video_width+15)/16)+(fx>>4));
+		int32_t *blocks[6] = {
+			settings->state_vid.dct_block_lists[0] + block_offs,
+			settings->state_vid.dct_block_lists[1] + block_offs,
+			settings->state_vid.dct_block_lists[2] + block_offs,
+			settings->state_vid.dct_block_lists[3] + block_offs,
+			settings->state_vid.dct_block_lists[4] + block_offs,
+			settings->state_vid.dct_block_lists[5] + block_offs,
+		};
+
 		for(int y = 0; y < 8; y++) {
 		for(int x = 0; x < 8; x++) {
 			int k = y*8+x;
@@ -367,8 +389,13 @@ void encode_block_str(uint8_t *video_frames, int video_frame_count, uint8_t *out
 
 			// TODO: Get the real math for this
 			int cluma = cr+cg*2+cb;
+#if 1
 			blocks[0][k] = ((cr<<2) - cluma + (1<<(4-1)))>>4;
 			blocks[1][k] = ((cb<<2) - cluma + (1<<(4-1)))>>4;
+#else
+			blocks[0][k] = 0;
+			blocks[1][k] = 0;
+#endif
 
 			for(int ly = 0; ly < 2; ly++) {
 			for(int lx = 0; lx < 2; lx++) {
@@ -379,16 +406,71 @@ void encode_block_str(uint8_t *video_frames, int video_frame_count, uint8_t *out
 
 				// TODO: Get the real math for this
 				int lluma = (lr+lg*2+lb+2)-0x200;
+				if(lluma < -0x200) { lluma = -0x200; }
+				if(lluma > +0x1FF) { lluma = +0x1FF; }
+				lluma >>= 1;
 				blocks[2+2*ly+lx][k] = lluma;
 			}
 			}
 		}
 		}
 		for(int i = 0; i < 6; i++) {
-			encode_dct_block(&(settings->state_vid), blocks[i], (i >= 2));
+			transform_dct_block(&(settings->state_vid), blocks[i]);
 		}
 	}
 	}
+
+	// Now reduce all the blocks
+	const int accum_threshold = 6500;
+	int values_to_shed = 0;
+	for(int min_val = 0;; min_val += 1) {
+		int accum = 0;
+		for(int fx = 0; fx < settings->video_width; fx += 16) {
+		for(int fy = 0; fy < settings->video_height; fy += 16) {
+			// Order: Cr Cb [Y1|Y2\nY3|Y4]
+			int block_offs = 8*8*((fy>>4)*((settings->video_width+15)/16)+(fx>>4));
+			int32_t *blocks[6] = {
+				settings->state_vid.dct_block_lists[0] + block_offs,
+				settings->state_vid.dct_block_lists[1] + block_offs,
+				settings->state_vid.dct_block_lists[2] + block_offs,
+				settings->state_vid.dct_block_lists[3] + block_offs,
+				settings->state_vid.dct_block_lists[4] + block_offs,
+				settings->state_vid.dct_block_lists[5] + block_offs,
+			};
+			const int luma_reduce_mul = 4;
+			const int chroma_reduce_mul = 4;
+			for(int i = 6-1; i >= 0; i--) {
+				accum += reduce_dct_block(&(settings->state_vid), blocks[i], (i < 2 ? min_val*luma_reduce_mul+1 : min_val*chroma_reduce_mul+1), &values_to_shed);
+			}
+		}
+		}
+
+		if(accum <= accum_threshold) {
+			break;
+		}
+
+		values_to_shed = accum - accum_threshold;
+	}
+
+	// Now encode all the blocks
+	for(int fx = 0; fx < settings->video_width; fx += 16) {
+	for(int fy = 0; fy < settings->video_height; fy += 16) {
+		// Order: Cr Cb [Y1|Y2\nY3|Y4]
+		int block_offs = 8*8*((fy>>4)*((settings->video_width+15)/16)+(fx>>4));
+		int32_t *blocks[6] = {
+			settings->state_vid.dct_block_lists[0] + block_offs,
+			settings->state_vid.dct_block_lists[1] + block_offs,
+			settings->state_vid.dct_block_lists[2] + block_offs,
+			settings->state_vid.dct_block_lists[3] + block_offs,
+			settings->state_vid.dct_block_lists[4] + block_offs,
+			settings->state_vid.dct_block_lists[5] + block_offs,
+		};
+		for(int i = 0; i < 6; i++) {
+			encode_dct_block(&(settings->state_vid), blocks[i]);
+		}
+	}
+	}
+
 	encode_bits(&(settings->state_vid), 10, 0x1FF);
 	encode_bits(&(settings->state_vid), 2, 0x2);
 	settings->state_vid.uncomp_hwords_used += 2;

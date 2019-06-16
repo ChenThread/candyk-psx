@@ -45,6 +45,7 @@ typedef struct {
 	int blocks_used;
 	int uncomp_hwords_used;
 	int quant_scale;
+	int32_t *dct_block_lists[6];
 } vid_encoder_state_t;
 
 typedef struct {

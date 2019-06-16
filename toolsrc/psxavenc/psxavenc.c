@@ -342,6 +342,9 @@ int main(int argc, char **argv) {
 	//settings.video_fps_den = 7*8;
 	settings.video_fps_num = 15;
 	settings.video_fps_den = 1;
+	for(int i = 0; i < 6; i++) {
+		settings.state_vid.dct_block_lists[i] = NULL;
+	}
 
 	arg_offset = parse_args(&settings, argc, argv);
 	if (arg_offset < 0) {
