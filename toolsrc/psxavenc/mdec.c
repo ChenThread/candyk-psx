@@ -178,6 +178,7 @@ static void flush_bits(vid_encoder_state_t *state)
 		assert(state->bytes_used < sizeof(state->unmuxed));
 		state->unmuxed[state->bytes_used++] = (uint8_t)state->bits_value;
 		assert(state->bytes_used < sizeof(state->unmuxed));
+		assert(state->bytes_used < 2016*state->frame_block_count);
 		state->unmuxed[state->bytes_used++] = (uint8_t)(state->bits_value>>8);
 	}
 	state->bits_left = 16;
@@ -323,9 +324,8 @@ static int reduce_dct_block(vid_encoder_state_t *state, int32_t *block, int32_t 
 	return nonzeroes+2;
 }
 
-void encode_block_str(uint8_t *video_frames, int video_frame_count, uint8_t *output, settings_t *settings)
+static void encode_frame_str(uint8_t *video_frames, int video_frame_count, uint8_t *output, settings_t *settings)
 {
-	uint8_t header[32];
 	int pitch = settings->video_width*4;
 	int real_index = (settings->state_vid.frame_index-1);
 	if (real_index > video_frame_count-1) {
@@ -343,7 +343,6 @@ void encode_block_str(uint8_t *video_frames, int video_frame_count, uint8_t *out
 	}
 
 	memset(settings->state_vid.unmuxed, 0, sizeof(settings->state_vid.unmuxed));
-	memset(header, 0, sizeof(header));
 
 	settings->state_vid.quant_scale = 1;
 	settings->state_vid.uncomp_hwords_used = 0;
@@ -418,8 +417,9 @@ void encode_block_str(uint8_t *video_frames, int video_frame_count, uint8_t *out
 	}
 
 	// Now reduce all the blocks
+	// TODO: Base this on actual bit count
 	//const int accum_threshold = 6500;
-	const int accum_threshold = 7500;
+	const int accum_threshold = 1025*settings->state_vid.frame_block_count;
 	int values_to_shed = 0;
 	for(int min_val = 0;; min_val += 1) {
 		int accum = 0;
@@ -435,8 +435,8 @@ void encode_block_str(uint8_t *video_frames, int video_frame_count, uint8_t *out
 				settings->state_vid.dct_block_lists[4] + block_offs,
 				settings->state_vid.dct_block_lists[5] + block_offs,
 			};
-			const int luma_reduce_mul = 4;
-			const int chroma_reduce_mul = 4;
+			const int luma_reduce_mul = 8;
+			const int chroma_reduce_mul = 8;
 			for(int i = 6-1; i >= 0; i--) {
 				accum += reduce_dct_block(&(settings->state_vid), blocks[i], (i < 2 ? min_val*luma_reduce_mul+1 : min_val*chroma_reduce_mul+1), &values_to_shed);
 			}
@@ -491,7 +491,24 @@ void encode_block_str(uint8_t *video_frames, int video_frame_count, uint8_t *out
 	settings->state_vid.unmuxed[0x006] = 0x02; // Version 2
 	settings->state_vid.unmuxed[0x007] = 0x00;
 
+}
+
+void encode_block_str(uint8_t *video_frames, int video_frame_count, uint8_t *output, settings_t *settings)
+{
+	uint8_t header[32];
+	memset(header, 0, sizeof(header));
+
 	for(int i = 0; i < 7; i++) {
+		while(settings->state_vid.frame_block_index >= settings->state_vid.frame_block_count) {
+			settings->state_vid.frame_index++;
+			// TODO: work out an optimal block count for this
+			// TODO: calculate this all based on FPS
+			settings->state_vid.frame_block_overflow_num += settings->state_vid.frame_block_base_overflow;
+			settings->state_vid.frame_block_count = settings->state_vid.frame_block_overflow_num / settings->state_vid.frame_block_overflow_den;
+			settings->state_vid.frame_block_overflow_num %= settings->state_vid.frame_block_overflow_den;
+			settings->state_vid.frame_block_index = 0;
+			encode_frame_str(video_frames, video_frame_count, output, settings);
+		}
 		// Header: MDEC0 register
 		header[0x000] = 0x60;
 		header[0x001] = 0x01;
@@ -499,8 +516,8 @@ void encode_block_str(uint8_t *video_frames, int video_frame_count, uint8_t *out
 		header[0x003] = 0x80;
 
 		// Muxed chunk index/count
-		int chunk_index = i;
-		int chunk_count = 7;
+		int chunk_index = settings->state_vid.frame_block_index;
+		int chunk_count = settings->state_vid.frame_block_count;
 		header[0x004] = (uint8_t)chunk_index;
 		header[0x005] = (uint8_t)(chunk_index>>8);
 		header[0x006] = (uint8_t)chunk_count;
@@ -541,8 +558,8 @@ void encode_block_str(uint8_t *video_frames, int video_frame_count, uint8_t *out
 		header[0x00F] = (uint8_t)(settings->state_vid.bytes_used>>24);
 
 		memcpy(output + 2352*i + 0x018, header, sizeof(header));
-		memcpy(output + 2352*i + 0x018 + 0x020, settings->state_vid.unmuxed + 2016*i, 2016);
-	}
+		memcpy(output + 2352*i + 0x018 + 0x020, settings->state_vid.unmuxed + 2016*settings->state_vid.frame_block_index, 2016);
 
-	settings->state_vid.frame_index++;
+		settings->state_vid.frame_block_index++;
+	}
 }
