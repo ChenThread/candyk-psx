@@ -203,23 +203,20 @@ static void encode_ac_value(vid_encoder_state_t *state, uint16_t value)
 {
 	assert(0 <= value && value <= 0xFFFF);
 
-	// FIXME: this is busted
-	if(false) for(int i = 0; i < sizeof(huffman_lookup)/sizeof(huffman_lookup[0]); i++) {
+	for(int i = 0; i < sizeof(huffman_lookup)/sizeof(huffman_lookup[0]); i++) {
 		if(value == huffman_lookup[i].u_hword_pos) {
-			printf("unescape + %04X %2d %04X\n", value, huffman_lookup[i].c_bits, huffman_lookup[i].c_value);
 			encode_bits(state, huffman_lookup[i].c_bits, huffman_lookup[i].c_value);
 			encode_bits(state, 1, 0);
 			return;
 		}
 		else if(value == huffman_lookup[i].u_hword_neg) {
-			printf("unescape - %04X %2d %04X\n", value, huffman_lookup[i].c_bits, huffman_lookup[i].c_value);
 			encode_bits(state, huffman_lookup[i].c_bits, huffman_lookup[i].c_value);
 			encode_bits(state, 1, 1);
+			return;
 		}
 	}
 
 	// Use an escape
-	//printf("escape %04X\n", value);
 	encode_bits(state, 6, 0x01);
 	encode_bits(state, 16, value);
 }
@@ -421,7 +418,8 @@ void encode_block_str(uint8_t *video_frames, int video_frame_count, uint8_t *out
 	}
 
 	// Now reduce all the blocks
-	const int accum_threshold = 6500;
+	//const int accum_threshold = 6500;
+	const int accum_threshold = 7500;
 	int values_to_shed = 0;
 	for(int min_val = 0;; min_val += 1) {
 		int accum = 0;
