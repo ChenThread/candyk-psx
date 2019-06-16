@@ -29,7 +29,8 @@ int16_t *load_samples(const char *filename, int *sample_count, settings_t *setti
 	int i, stream_index, frame_size, frame_sample_count, sample_count_mul;
 	AVFormatContext* format;
 	AVStream* stream;
-	AVCodecContext* codec;
+	AVCodecContext* codec_context;
+	AVCodec* codec;
 	struct SwrContext* resampler;
 	AVPacket packet;
 	AVFrame* frame;
@@ -46,7 +47,7 @@ int16_t *load_samples(const char *filename, int *sample_count, settings_t *setti
 
 	stream_index = -1;
 	for (i = 0; i < format->nb_streams; i++) {
-		if (format->streams[i]->codec->codec_type == AVMEDIA_TYPE_AUDIO) {
+		if (format->streams[i]->codecpar->codec_type == AVMEDIA_TYPE_AUDIO) {
 			if (stream_index >= 0) {
 				fprintf(stderr, "load_samples: found multiple audio tracks?\n");
 				return NULL;
@@ -59,16 +60,23 @@ int16_t *load_samples(const char *filename, int *sample_count, settings_t *setti
 	}
 
 	stream = format->streams[stream_index];
-	codec = stream->codec;
-	if (avcodec_open2(codec, avcodec_find_decoder(codec->codec_id), NULL) < 0) {
+	codec = avcodec_find_decoder(stream->codecpar->codec_id);
+	codec_context = avcodec_alloc_context3(codec);
+	if(codec_context == NULL) {
+		return NULL;
+	}
+	if (avcodec_parameters_to_context(codec_context, stream->codecpar) < 0) {
+		return NULL;
+	}
+	if (avcodec_open2(codec_context, codec, NULL) < 0) {
 		return NULL;
 	}
 
 	resampler = swr_alloc();
-	av_opt_set_int(resampler, "in_channel_count", codec->channels, 0);
-	av_opt_set_int(resampler, "in_channel_layout", codec->channel_layout, 0);
-	av_opt_set_int(resampler, "in_sample_rate", codec->sample_rate, 0);
-	av_opt_set_sample_fmt(resampler, "in_sample_fmt", codec->sample_fmt, 0);
+	av_opt_set_int(resampler, "in_channel_count", codec_context->channels, 0);
+	av_opt_set_int(resampler, "in_channel_layout", codec_context->channel_layout, 0);
+	av_opt_set_int(resampler, "in_sample_rate", codec_context->sample_rate, 0);
+	av_opt_set_sample_fmt(resampler, "in_sample_fmt", codec_context->sample_fmt, 0);
 
 	sample_count_mul = settings->stereo ? 2 : 1;
 	av_opt_set_int(resampler, "out_channel_count", settings->stereo ? 2 : 1, 0);
@@ -77,12 +85,14 @@ int16_t *load_samples(const char *filename, int *sample_count, settings_t *setti
 	av_opt_set_sample_fmt(resampler, "out_sample_fmt", AV_SAMPLE_FMT_S16, 0);
 
 	if (swr_init(resampler) < 0) {
+		avcodec_free_context(&codec_context);
 		return NULL;
 	}
 
 	av_init_packet(&packet);
 	frame = av_frame_alloc();
 	if (!frame) {
+		avcodec_free_context(&codec_context);
 		return NULL;
 	}
 
@@ -90,7 +100,7 @@ int16_t *load_samples(const char *filename, int *sample_count, settings_t *setti
 	*sample_count = 0;
 
 	while (av_read_frame(format, &packet) >= 0) {
-		if (decode_frame(codec, frame, &frame_size, &packet)) {
+		if (decode_frame(codec_context, frame, &frame_size, &packet)) {
 			size_t buffer_size = sizeof(int16_t) * sample_count_mul * swr_get_out_samples(resampler, frame->nb_samples);
 			buffer[0] = malloc(buffer_size);
 			memset(buffer[0], 0, buffer_size);
@@ -108,7 +118,8 @@ int16_t *load_samples(const char *filename, int *sample_count, settings_t *setti
 
 	av_frame_free(&frame);
 	swr_free(&resampler);
-	avcodec_close(codec);
+	avcodec_close(codec_context);
+	avcodec_free_context(&codec_context);
 	avformat_free_context(format);
 
 	return out;
