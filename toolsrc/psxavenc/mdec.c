@@ -243,10 +243,10 @@ static void transform_dct_block(vid_encoder_state_t *state, int32_t *block)
 	}
 
 	// FIXME: Work out why the math has to go this way
-	block[0] /= 4;
+	block[0] /= 8;
 	for (int i = 0; i < 64; i++) {
 		// Finish reducing it
-		block[i] /= 8;
+		block[i] /= 4;
 
 		// If it's below the quantisation threshold, zero it
 		if(abs(block[i]) < quant_dec[i]) {
