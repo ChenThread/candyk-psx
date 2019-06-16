@@ -34,10 +34,16 @@ typedef struct {
 	int prev1, prev2;
 } aud_encoder_state_t;
 
+#define MAX_UNMUXED_BLOCKS 10
 typedef struct {
 	int frame_index;
 	uint16_t bits_value;
 	int bits_left;
+	uint8_t unmuxed[2016*MAX_UNMUXED_BLOCKS];
+	int bytes_used;
+	int blocks_used;
+	int uncomp_hwords_used;
+	int quant_scale;
 } vid_encoder_state_t;
 
 typedef struct {
