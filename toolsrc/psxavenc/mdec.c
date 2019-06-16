@@ -6,6 +6,139 @@ Copyright (c) 2019 Ben "GreaseMonkey" Russell
 
 #include "common.h"
 
+#define MAKE_HUFFMAN_PAIR(zeroes, value) (((zeroes)<<10)|((+(value))&0x3FF)),(((zeroes)<<10)|((-(value))&0x3FF))
+const struct {
+	int c_bits;
+	uint32_t c_value;
+	uint16_t u_hword_pos;
+	uint16_t u_hword_neg;
+} huffman_lookup[] = {
+	// Fuck this Huffman tree in particular --GM
+	2,0x3,MAKE_HUFFMAN_PAIR(0,1),
+	3,0x3,MAKE_HUFFMAN_PAIR(1,1),
+	4,0x4,MAKE_HUFFMAN_PAIR(0,2),
+	4,0x5,MAKE_HUFFMAN_PAIR(2,1),
+	5,0x05,MAKE_HUFFMAN_PAIR(0,3),
+	5,0x06,MAKE_HUFFMAN_PAIR(4,1),
+	5,0x07,MAKE_HUFFMAN_PAIR(3,1),
+	6,0x04,MAKE_HUFFMAN_PAIR(7,1),
+	6,0x05,MAKE_HUFFMAN_PAIR(6,1),
+	6,0x06,MAKE_HUFFMAN_PAIR(1,2),
+	6,0x07,MAKE_HUFFMAN_PAIR(5,1),
+	7,0x04,MAKE_HUFFMAN_PAIR(2,2),
+	7,0x05,MAKE_HUFFMAN_PAIR(9,1),
+	7,0x06,MAKE_HUFFMAN_PAIR(0,4),
+	7,0x07,MAKE_HUFFMAN_PAIR(8,1),
+	8,0x20,MAKE_HUFFMAN_PAIR(13,1),
+	8,0x21,MAKE_HUFFMAN_PAIR(0,6),
+	8,0x22,MAKE_HUFFMAN_PAIR(12,1),
+	8,0x23,MAKE_HUFFMAN_PAIR(11,1),
+	8,0x24,MAKE_HUFFMAN_PAIR(3,2),
+	8,0x25,MAKE_HUFFMAN_PAIR(1,3),
+	8,0x26,MAKE_HUFFMAN_PAIR(0,5),
+	8,0x27,MAKE_HUFFMAN_PAIR(10,1),
+	10,0x008,MAKE_HUFFMAN_PAIR(16,1),
+	10,0x009,MAKE_HUFFMAN_PAIR(5,2),
+	10,0x00A,MAKE_HUFFMAN_PAIR(0,7),
+	10,0x00B,MAKE_HUFFMAN_PAIR(2,3),
+	10,0x00C,MAKE_HUFFMAN_PAIR(1,4),
+	10,0x00D,MAKE_HUFFMAN_PAIR(15,1),
+	10,0x00E,MAKE_HUFFMAN_PAIR(14,1),
+	10,0x00F,MAKE_HUFFMAN_PAIR(4,2),
+	12,0x010,MAKE_HUFFMAN_PAIR(0,11),
+	12,0x011,MAKE_HUFFMAN_PAIR(8,2),
+	12,0x012,MAKE_HUFFMAN_PAIR(4,3),
+	12,0x013,MAKE_HUFFMAN_PAIR(0,10),
+	12,0x014,MAKE_HUFFMAN_PAIR(2,4),
+	12,0x015,MAKE_HUFFMAN_PAIR(7,2),
+	12,0x016,MAKE_HUFFMAN_PAIR(21,1),
+	12,0x017,MAKE_HUFFMAN_PAIR(20,1),
+	12,0x018,MAKE_HUFFMAN_PAIR(0,9),
+	12,0x019,MAKE_HUFFMAN_PAIR(19,1),
+	12,0x01A,MAKE_HUFFMAN_PAIR(18,1),
+	12,0x01B,MAKE_HUFFMAN_PAIR(1,5),
+	12,0x01C,MAKE_HUFFMAN_PAIR(3,3),
+	12,0x01D,MAKE_HUFFMAN_PAIR(0,8),
+	12,0x01E,MAKE_HUFFMAN_PAIR(6,2),
+	12,0x01F,MAKE_HUFFMAN_PAIR(17,1),
+	13,0x0010,MAKE_HUFFMAN_PAIR(10,2),
+	13,0x0011,MAKE_HUFFMAN_PAIR(9,2),
+	13,0x0012,MAKE_HUFFMAN_PAIR(5,3),
+	13,0x0013,MAKE_HUFFMAN_PAIR(3,4),
+	13,0x0014,MAKE_HUFFMAN_PAIR(2,5),
+	13,0x0015,MAKE_HUFFMAN_PAIR(1,7),
+	13,0x0016,MAKE_HUFFMAN_PAIR(1,6),
+	13,0x0017,MAKE_HUFFMAN_PAIR(0,15),
+	13,0x0018,MAKE_HUFFMAN_PAIR(0,14),
+	13,0x0019,MAKE_HUFFMAN_PAIR(0,13),
+	13,0x001A,MAKE_HUFFMAN_PAIR(0,12),
+	13,0x001B,MAKE_HUFFMAN_PAIR(26,1),
+	13,0x001C,MAKE_HUFFMAN_PAIR(25,1),
+	13,0x001D,MAKE_HUFFMAN_PAIR(24,1),
+	13,0x001E,MAKE_HUFFMAN_PAIR(23,1),
+	13,0x001F,MAKE_HUFFMAN_PAIR(22,1),
+	14,0x0010,MAKE_HUFFMAN_PAIR(0,31),
+	14,0x0011,MAKE_HUFFMAN_PAIR(0,30),
+	14,0x0012,MAKE_HUFFMAN_PAIR(0,29),
+	14,0x0013,MAKE_HUFFMAN_PAIR(0,28),
+	14,0x0014,MAKE_HUFFMAN_PAIR(0,27),
+	14,0x0015,MAKE_HUFFMAN_PAIR(0,26),
+	14,0x0016,MAKE_HUFFMAN_PAIR(0,25),
+	14,0x0017,MAKE_HUFFMAN_PAIR(0,24),
+	14,0x0018,MAKE_HUFFMAN_PAIR(0,23),
+	14,0x0019,MAKE_HUFFMAN_PAIR(0,22),
+	14,0x001A,MAKE_HUFFMAN_PAIR(0,21),
+	14,0x001B,MAKE_HUFFMAN_PAIR(0,20),
+	14,0x001C,MAKE_HUFFMAN_PAIR(0,19),
+	14,0x001D,MAKE_HUFFMAN_PAIR(0,18),
+	14,0x001E,MAKE_HUFFMAN_PAIR(0,17),
+	14,0x001F,MAKE_HUFFMAN_PAIR(0,16),
+	15,0x0010,MAKE_HUFFMAN_PAIR(0,40),
+	15,0x0011,MAKE_HUFFMAN_PAIR(0,39),
+	15,0x0012,MAKE_HUFFMAN_PAIR(0,38),
+	15,0x0013,MAKE_HUFFMAN_PAIR(0,37),
+	15,0x0014,MAKE_HUFFMAN_PAIR(0,36),
+	15,0x0015,MAKE_HUFFMAN_PAIR(0,35),
+	15,0x0016,MAKE_HUFFMAN_PAIR(0,34),
+	15,0x0017,MAKE_HUFFMAN_PAIR(0,33),
+	15,0x0018,MAKE_HUFFMAN_PAIR(0,32),
+	15,0x0019,MAKE_HUFFMAN_PAIR(1,14),
+	15,0x001A,MAKE_HUFFMAN_PAIR(1,13),
+	15,0x001B,MAKE_HUFFMAN_PAIR(1,12),
+	15,0x001C,MAKE_HUFFMAN_PAIR(1,11),
+	15,0x001D,MAKE_HUFFMAN_PAIR(1,10),
+	15,0x001E,MAKE_HUFFMAN_PAIR(1,9),
+	15,0x001F,MAKE_HUFFMAN_PAIR(1,8),
+	16,0x0010,MAKE_HUFFMAN_PAIR(1,18),
+	16,0x0011,MAKE_HUFFMAN_PAIR(1,17),
+	16,0x0012,MAKE_HUFFMAN_PAIR(1,16),
+	16,0x0013,MAKE_HUFFMAN_PAIR(1,15),
+	16,0x0014,MAKE_HUFFMAN_PAIR(6,3),
+	16,0x0015,MAKE_HUFFMAN_PAIR(16,2),
+	16,0x0016,MAKE_HUFFMAN_PAIR(15,2),
+	16,0x0017,MAKE_HUFFMAN_PAIR(14,2),
+	16,0x0018,MAKE_HUFFMAN_PAIR(13,2),
+	16,0x0019,MAKE_HUFFMAN_PAIR(12,2),
+	16,0x001A,MAKE_HUFFMAN_PAIR(11,2),
+	16,0x001B,MAKE_HUFFMAN_PAIR(31,1),
+	16,0x001C,MAKE_HUFFMAN_PAIR(30,1),
+	16,0x001D,MAKE_HUFFMAN_PAIR(29,1),
+	16,0x001E,MAKE_HUFFMAN_PAIR(28,1),
+	16,0x001F,MAKE_HUFFMAN_PAIR(27,1),
+};
+#undef MAKE_HUFFMAN_PAIR
+
+const uint8_t quant_dec[8*8] = {
+	 2, 16, 19, 22, 26, 27, 29, 34,
+	16, 16, 22, 24, 27, 29, 34, 37,
+	19, 22, 26, 27, 29, 34, 34, 38,
+	22, 22, 26, 27, 29, 34, 37, 40,
+	22, 26, 27, 29, 32, 35, 40, 48,
+	26, 27, 29, 32, 35, 40, 48, 58,
+	26, 27, 29, 34, 38, 46, 56, 69,
+	27, 29, 35, 38, 46, 56, 69, 83,
+};
+
 const uint8_t dct_zigzag_table[8*8] = {
 	0x00,0x01,0x05,0x06,0x0E,0x0F,0x1B,0x1C,
 	0x02,0x04,0x07,0x0D,0x10,0x1A,0x1D,0x2A,
@@ -67,6 +200,27 @@ static void encode_bits(vid_encoder_state_t *state, int bits, uint32_t val)
 	//val >>= bits;
 }
 
+static void encode_ac_value(vid_encoder_state_t *state, uint16_t value)
+{
+	assert(0 <= value && value <= 0xFFFF);
+
+	for(int i = 0; i < sizeof(huffman_lookup)/sizeof(huffman_lookup[0]); i++) {
+		if(value == huffman_lookup[i].u_hword_pos) {
+			encode_bits(state, huffman_lookup[i].c_bits, huffman_lookup[i].c_value);
+			encode_bits(state, 1, 0);
+			return;
+		}
+		else if(value == huffman_lookup[i].u_hword_neg) {
+			encode_bits(state, huffman_lookup[i].c_bits, huffman_lookup[i].c_value);
+			encode_bits(state, 1, 1);
+		}
+	}
+
+	// Use an escape
+	encode_bits(state, 6, 0x01);
+	encode_bits(state, 16, value);
+}
+
 static void encode_dct_block(vid_encoder_state_t *state, int32_t *block, bool is_luma)
 {
 	int dc_value = 0;
@@ -79,24 +233,89 @@ static void encode_dct_block(vid_encoder_state_t *state, int32_t *block, bool is
 		for (int j = 0; j < 8; j++) {
 			int32_t v = 0;
 			for(int k = 0; k < 8; k++) {
-				v += block[8*i+k]*dct_scale_table[8*i+k];
+				v += block[8*j+k]*dct_scale_table[8*i+k];
 			}
-			midblock[8*j+i] = (v + (1<<((14+2)-1)))>>(14+2);
+			midblock[8*i+j] = (v + (1<<((14)-1)))>>(14);
 		}
 		}
 		memcpy(block, midblock, sizeof(midblock));
 	}
 
 	for (int i = 0; i < 64; i++) {
+		//block[i] = (block[i] + quant_dec[i]*(8/2))/(quant_dec[i]*8);
+		block[i] = (block[i])/(quant_dec[i]*8);
 		if (block[i] < -0x200) { block[i] = -0x200; }
 		if (block[i] > +0x1FF) { block[i] = +0x1FF; }
 	}
 
+	// Get DC value
 	dc_value = block[0];
-	//printf("dc %08X\n", dc_value);
+	//dc_value = 0;
+	encode_bits(state, 10, dc_value&0x3FF);
+
+	// Reduce so the damn thing can fit
+	{
+		const int max_nonzeroes = 2;
+		int nonzeroes = 0;
+		for (int i = 1; i < 64; i++) {
+			if (block[i] != 0) {
+				nonzeroes++;
+			}
+		}
+
+		if(nonzeroes > 0) {
+			// OK, find the largest of each
+			bool safe_block[8*8];
+			memset(safe_block, 0, sizeof(safe_block));
+			for(int reps = 0; reps < max_nonzeroes; reps++) {
+				int max_i = 1;
+				int max_v = -1;
+				for (int i = 1; i < 64; i++) {
+					if ((!safe_block[i]) && abs(block[i]) > max_v) {
+						max_v = abs(block[i]);
+						max_i = i;
+					}
+				}
+
+				if(max_v == -1) {
+					break;
+				}
+				safe_block[max_i] = true;
+			}
+
+			// Now clear the stuff that isn't big enough
+			for (int i = 1; i < 64; i++) {
+				if (!safe_block[i]) {
+					block[i] = 0;
+				}
+			}
+		}
+	}
+
+	// Build RLE output
+	uint16_t zero_rle_data[8*8];
+	int zero_rle_words = 0;
+	for (int i = 1, zeroes = 0; i < 64; i++) {
+		int ri = dct_zagzig_table[i];
+		//int ri = dct_zigzag_table[i];
+		if (block[ri] == 0) {
+			zeroes++;
+		} else {
+			zero_rle_data[zero_rle_words++] = (zeroes<<10)|(block[ri]&0x3FF);
+			zeroes = 0;
+			state->uncomp_hwords_used += 1;
+		}
+	}
+
+	// Now Huffman-code the data
+	for (int i = 0; i < zero_rle_words; i++) {
+		encode_ac_value(state, zero_rle_data[i]);
+	}
+
+	//printf("dc %08X rles %2d\n", dc_value, zero_rle_words);
 	//assert(dc_value >= -0x200); assert(dc_value <  +0x200);
 
-	encode_bits(state, 10, dc_value&0x3FF);
+	// Store end of block
 	encode_bits(state, 2, 0x2);
 	state->uncomp_hwords_used += 2;
 
@@ -148,8 +367,8 @@ void encode_block_str(uint8_t *video_frames, int video_frame_count, uint8_t *out
 
 			// TODO: Get the real math for this
 			int cluma = cr+cg*2+cb;
-			blocks[0][k] = ((cr<<2) - cluma)>>2;
-			blocks[1][k] = ((cb<<2) - cluma)>>2;
+			blocks[0][k] = ((cr<<2) - cluma + (1<<(4-1)))>>4;
+			blocks[1][k] = ((cb<<2) - cluma + (1<<(4-1)))>>4;
 
 			for(int ly = 0; ly < 2; ly++) {
 			for(int lx = 0; lx < 2; lx++) {

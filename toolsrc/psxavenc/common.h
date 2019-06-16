@@ -35,7 +35,7 @@ typedef struct {
 	int prev1, prev2;
 } aud_encoder_state_t;
 
-#define MAX_UNMUXED_BLOCKS 10
+#define MAX_UNMUXED_BLOCKS 7
 typedef struct {
 	int frame_index;
 	uint16_t bits_value;
