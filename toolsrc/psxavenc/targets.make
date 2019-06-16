@@ -13,7 +13,7 @@ TOOLS_PSXAVENC_INCS =
 TOOLS_PSXAVENC_INCS += toolsrc/psxavenc/common.h
 
 $(OUTPUT_BINDIR)psxavenc$(EXEPOST): $(TOOLS_PSXAVENC_SRCS) $(TOOLS_PSXAVENC_INCS)
-	$(NATIVE_CC) -o $@ $(TOOLS_PSXAVENC_SRCS) $(NATIVE_CFLAGS) $(NATIVE_LDFLAGS) -lavcodec -lavformat -lavutil -lswresample
+	$(NATIVE_CC) -o $@ $(TOOLS_PSXAVENC_SRCS) $(NATIVE_CFLAGS) $(NATIVE_LDFLAGS) -lavcodec -lavformat -lavutil -lswresample -lswscale
 
 $(OUTPUT_BINDIR)spuenc$(EXEPOST): $(OUTPUT_BINDIR)psxavenc$(EXEPOST)
 	cp "$(OUTPUT_BINDIR)psxavenc$(EXEPOST)" "$(OUTPUT_BINDIR)spuenc$(EXEPOST)"

@@ -123,7 +123,7 @@ void encode_file_str(int16_t *audio_samples, int audio_sample_count, uint8_t *vi
 			for(int k = 0; k < 7; k++) {
 				init_sector_buffer(buffer + 2352*k, settings, true);
 			}
-			encode_block_str(video_frames, buffer, settings);
+			encode_block_str(video_frames, video_frame_count, buffer, settings);
 			for(int k = 0; k < 8; k++) {
 				int t = k + (j/18)*8 + 75*2;
 
