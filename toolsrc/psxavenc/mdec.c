@@ -6,6 +6,17 @@ Copyright (c) 2019 Ben "GreaseMonkey" Russell
 
 #include "common.h"
 
+const int16_t dct_scale_table[8][8] = {
+	+0x5A82, +0x5A82, +0x5A82, +0x5A82, +0x5A82, +0x5A82, +0x5A82, +0x5A82,
+	+0x7D8A, +0x6A6D, +0x471C, +0x18F8, -0x18F9, -0x471D, -0x6A6E, -0x7D8B,
+	+0x7641, +0x30FB, -0x30FC, -0x7642, -0x7642, -0x30FC, +0x30FB, +0x7641,
+	+0x6A6D, -0x18F9, -0x7D8B, -0x471D, +0x471C, +0x7D8A, +0x18F8, -0x6A6E,
+	+0x5A82, -0x5A83, -0x5A83, +0x5A82, +0x5A82, -0x5A83, -0x5A83, +0x5A82,
+	+0x471C, -0x7D8B, +0x18F8, +0x6A6D, -0x6A6E, -0x18F9, +0x7D8A, -0x471D,
+	+0x30FB, -0x7642, +0x7641, -0x30FC, -0x30FC, +0x7641, -0x7642, +0x30FB,
+	+0x18F8, -0x471D, +0x6A6D, -0x7D8B, +0x7D8A, -0x6A6E, +0x471C, -0x18F9,
+};
+
 static void flush_bits(vid_encoder_state_t *state)
 {
 	if(state->bits_left < 16) {
@@ -34,14 +45,18 @@ static void encode_bits(vid_encoder_state_t *state, int bits, uint32_t val)
 	//val >>= bits;
 }
 
-static void encode_dct_block(vid_encoder_state_t *state, bool is_luma)
+static void encode_dct_block(vid_encoder_state_t *state, int16_t *block, bool is_luma)
 {
 	int dc_value = 0;
 
+#if 0
 	if(is_luma) {
 		// -0x200 == black, 0x1FF = white
 		dc_value -= 0x200;
 	}
+#else
+	dc_value = block[0];
+#endif
 
 	encode_bits(state, 10, dc_value&0x3FF);
 	encode_bits(state, 2, 0x2);
@@ -50,9 +65,15 @@ static void encode_dct_block(vid_encoder_state_t *state, bool is_luma)
 	state->uncomp_hwords_used = (state->uncomp_hwords_used+0xF)&~0xF;
 }
 
-void encode_block_str(uint8_t *video_frames, uint8_t *output, settings_t *settings)
+void encode_block_str(uint8_t *video_frames, int video_frame_count, uint8_t *output, settings_t *settings)
 {
 	uint8_t header[32];
+	int pitch = settings->video_width*4;
+	int real_index = (settings->state_vid.frame_index-1);
+	if (real_index > video_frame_count-1) {
+		real_index = video_frame_count-1;
+	}
+	uint8_t *video_frame = video_frames + settings->video_width*settings->video_height*4*real_index;
 
 	memset(settings->state_vid.unmuxed, 0, sizeof(settings->state_vid.unmuxed));
 	memset(header, 0, sizeof(header));
@@ -70,8 +91,45 @@ void encode_block_str(uint8_t *video_frames, uint8_t *output, settings_t *settin
 	for(int fx = 0; fx < settings->video_width; fx += 16) {
 	for(int fy = 0; fy < settings->video_height; fy += 16) {
 		// Order: Cr Cb [Y1|Y2\nY3|Y4]
+		int16_t blocks[6][8*8];
+		for(int y = 0; y < 8; y++) {
+		for(int x = 0; x < 8; x++) {
+			int k = y*8+x;
+
+			int cr = 0;
+			int cg = 0;
+			int cb = 0;
+			for(int cy = 0; cy < 2; cy++) {
+			for(int cx = 0; cx < 2; cx++) {
+				int coffs = pitch*(fy+y*2+cy) + 4*(fx+x*2+cx);
+				cr += video_frame[coffs+0];
+				cg += video_frame[coffs+1];
+				cb += video_frame[coffs+2];
+			}
+			}
+
+			// TODO: Get the real math for this
+			int cluma = (cr+cg*2+cb+2)>>2;
+			// TODO: Chroma
+			blocks[0][k] = 0;
+			blocks[1][k] = 0;
+
+			for(int ly = 0; ly < 2; ly++) {
+			for(int lx = 0; lx < 2; lx++) {
+				int loffs = pitch*(fy+ly*8+y) + 4*(fx+lx*8+x);
+				int lr = video_frame[loffs+0];
+				int lg = video_frame[loffs+1];
+				int lb = video_frame[loffs+2];
+
+				// TODO: Get the real math for this
+				int lluma = (lr+lg*2+lb+2)-0x200;
+				blocks[2+2*ly+lx][k] = lluma;
+			}
+			}
+		}
+		}
 		for(int i = 0; i < 6; i++) {
-			encode_dct_block(&(settings->state_vid), (i >= 2));
+			encode_dct_block(&(settings->state_vid), blocks[i], (i >= 2));
 		}
 	}
 	}

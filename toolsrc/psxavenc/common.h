@@ -15,6 +15,7 @@ Copyright (c) 2019 Ben "GreaseMonkey" Russell
 #include <libavutil/opt.h>
 #include <libavcodec/avcodec.h>
 #include <libavformat/avformat.h>
+#include <libswscale/swscale.h>
 #include <libswresample/swresample.h>
 
 #define FREQ_SINGLE 18900
@@ -56,6 +57,8 @@ typedef struct {
 
 	int video_width;
 	int video_height;
+	int video_fps_num; // FPS numerator
+	int video_fps_den; // FPS denominator
 
 	aud_encoder_state_t state_left;
 	aud_encoder_state_t state_right;
@@ -76,4 +79,4 @@ void encode_file_xa(int16_t *audio_samples, int audio_sample_count, settings_t *
 void encode_file_str(int16_t *audio_samples, int audio_sample_count, uint8_t *video_frames, int video_frame_count, settings_t *settings, FILE *output);
 
 // mdec.c
-void encode_block_str(uint8_t *video_frames, uint8_t *output, settings_t *settings);
+void encode_block_str(uint8_t *video_frames, int video_frame_count, uint8_t *output, settings_t *settings);
