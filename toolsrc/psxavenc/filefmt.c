@@ -70,14 +70,12 @@ static void encode_block_xa(int16_t *audio_samples, uint8_t *data, settings_t *s
 
 void encode_file_xa(int16_t *audio_samples, int audio_sample_count, settings_t *settings, FILE *output) {
 	uint8_t buffer[2352];
-	uint8_t *data;
-	int i, j = 0;
 	int sample_jump = (settings->bits_per_sample == 8) ? 112 : 224;
 
-	init_sector_buffer(buffer, settings);
+	init_sector_buffer(buffer, settings, false);
 
-	for (i = 0; i < audio_sample_count; i += sample_jump) {
-		data = buffer + 0x18 + (j * 0x80);
+	for (int i = 0, j = 0; i < audio_sample_count; i += sample_jump, j++) {
+		uint8_t *data = buffer + 0x18 + ((j%18) * 0x80);
 
 		encode_block_xa(audio_samples + i, data, settings);
 
@@ -90,21 +88,57 @@ void encode_file_xa(int16_t *audio_samples, int audio_sample_count, settings_t *
 			buffer[0x16] |= 0x80;
 		}
 
-		if ((++j) == 18) {
+		if ((j+1)%18 == 0 || i + sample_jump >= audio_sample_count) {
 			calculate_edc_xa(buffer);
 			WRITE_BUFFER();
-			j = 0;
 		}
-	}
-
-	// write final sector
-	if (j > 0) {
-		calculate_edc_xa(buffer);
-		WRITE_BUFFER();
 	}
 }
 
-void encode_file_str(int16_t *audio_samples, int audio_sample_count, settings_t *settings, FILE *output) {
-	fprintf(stderr, "encode_file_str: Not supported yet!\n");
-	abort();
+void encode_file_str(int16_t *audio_samples, int audio_sample_count, uint8_t *video_frames, int video_frame_count, settings_t *settings, FILE *output) {
+	uint8_t buffer[2352*8];
+	int sample_jump = (settings->bits_per_sample == 8) ? 112 : 224;
+
+	settings->state_vid.frame_index = 1;
+	settings->state_vid.bits_value = 0;
+	settings->state_vid.bits_left = 16;
+
+	init_sector_buffer(buffer + 2352*7, settings, false);
+	for (int i = 0, j = 0; i < audio_sample_count; i += sample_jump, j++) {
+
+		uint8_t *data = buffer + 2352*7 + 0x18 + ((j%18) * 0x80);
+
+		encode_block_xa(audio_samples + i, data, settings);
+
+		memcpy(data + 4, data, 4);
+		memcpy(data + 12, data + 8, 4);
+
+		if ((i + sample_jump) >= audio_sample_count) {
+			// next written buffer is final
+			buffer[2352*7 + 0x12] |= 0x80;
+			buffer[2352*7 + 0x16] |= 0x80;
+		}
+
+		if ((j+1)%18 == 0 || i + sample_jump >= audio_sample_count) {
+			for(int k = 0; k < 7; k++) {
+				init_sector_buffer(buffer + 2352*k, settings, true);
+			}
+			encode_block_str(video_frames, buffer, settings);
+			for(int k = 0; k < 8; k++) {
+				int t = k + (j/18)*8 + 75*2;
+
+				// Put the time in
+				buffer[0x00C + 2352*k] = ((t/75/60)%10)|(((t/75/60)/10)<<4);
+				buffer[0x00D + 2352*k] = (((t/75)%60)%10)|((((t/75)%60)/10)<<4);
+				buffer[0x00E + 2352*k] = ((t%75)%10)|(((t%75)/10)<<4);
+
+				if(k != 7) {
+					calculate_edc_data(buffer + 2352*k);
+				}
+			}
+			calculate_edc_xa(buffer + 2352*7);
+			fwrite(buffer, 2352*8, 1, output);
+			init_sector_buffer(buffer + 2352*7, settings, false);
+		}
+	}
 }

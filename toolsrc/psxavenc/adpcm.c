@@ -9,7 +9,7 @@ Copyright (c) 2019 Ben "GreaseMonkey" Russell
 static const int16_t filter_k1[ADPCM_FILTER_COUNT] = {0, 60, 115, 98, 122};
 static const int16_t filter_k2[ADPCM_FILTER_COUNT] = {0, 0, -52, -55, -60};
 
-static int find_min_shift(const encoder_state_t *state, int16_t *samples, int pitch, int filter) {
+static int find_min_shift(const aud_encoder_state_t *state, int16_t *samples, int pitch, int filter) {
 	// Assumption made:
 	//
 	// There is value in shifting right one step further to allow the nibbles to clip.
@@ -44,7 +44,7 @@ static int find_min_shift(const encoder_state_t *state, int16_t *samples, int pi
 	return min_shift;
 }
 
-static uint8_t attempt_to_encode_nibbles(encoder_state_t *outstate, const encoder_state_t *instate, int16_t *samples, int pitch, uint8_t *data, int data_shift, int data_pitch, int filter, int sample_shift) {
+static uint8_t attempt_to_encode_nibbles(aud_encoder_state_t *outstate, const aud_encoder_state_t *instate, int16_t *samples, int pitch, uint8_t *data, int data_shift, int data_pitch, int filter, int sample_shift) {
 	uint8_t nondata_mask = ~(0x0F << data_shift);
 	int min_shift = sample_shift;
 	int k1 = filter_k1[filter];
@@ -53,7 +53,7 @@ static uint8_t attempt_to_encode_nibbles(encoder_state_t *outstate, const encode
 	uint8_t hdr = (min_shift & 0x0F) | (filter << 4);
 
 	if (outstate != instate) {
-		memcpy(outstate, instate, sizeof(encoder_state_t));
+		memcpy(outstate, instate, sizeof(aud_encoder_state_t));
 	}
 
 	outstate->mse = 0;
@@ -91,8 +91,8 @@ static uint8_t attempt_to_encode_nibbles(encoder_state_t *outstate, const encode
 	return hdr;
 }
 
-uint8_t encode_nibbles(encoder_state_t *state, int16_t *samples, int pitch, uint8_t *data, int data_shift, int data_pitch, int filter_count) {
-	encoder_state_t proposed;
+uint8_t encode_nibbles(aud_encoder_state_t *state, int16_t *samples, int pitch, uint8_t *data, int data_shift, int data_pitch, int filter_count) {
+	aud_encoder_state_t proposed;
 	int64_t best_mse = ((int64_t)1<<(int64_t)50);
 	int best_filter = 0;
 	int best_sample_shift = 0;

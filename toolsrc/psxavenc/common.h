@@ -32,7 +32,13 @@ typedef struct {
 	int qerr; // quanitisation error
 	uint64_t mse; // mean square error
 	int prev1, prev2;
-} encoder_state_t;
+} aud_encoder_state_t;
+
+typedef struct {
+	int frame_index;
+	uint16_t bits_value;
+	int bits_left;
+} vid_encoder_state_t;
 
 typedef struct {
 	int format; // FORMAT_*
@@ -42,20 +48,26 @@ typedef struct {
 	int file_number; // 00-FF
 	int channel_number; // 00-1F
 
-	encoder_state_t state_left;
-	encoder_state_t state_right;
+	int video_width;
+	int video_height;
+
+	aud_encoder_state_t state_left;
+	aud_encoder_state_t state_right;
+	vid_encoder_state_t state_vid;
 } settings_t;
 
 // adpcm.c
-uint8_t encode_nibbles(encoder_state_t *state, int16_t *samples, int pitch, uint8_t *data, int data_shift, int data_pitch, int filter_count);
+uint8_t encode_nibbles(aud_encoder_state_t *state, int16_t *samples, int pitch, uint8_t *data, int data_shift, int data_pitch, int filter_count);
 
 // cdrom.c
-void init_sector_buffer(uint8_t *buffer, settings_t *settings);
+void init_sector_buffer(uint8_t *buffer, settings_t *settings, bool is_video);
 void calculate_edc_xa(uint8_t *buffer);
+void calculate_edc_data(uint8_t *buffer);
 
 // filefmt.c
 void encode_file_spu(int16_t *audio_samples, int audio_sample_count, settings_t *settings, FILE *output);
 void encode_file_xa(int16_t *audio_samples, int audio_sample_count, settings_t *settings, FILE *output);
-void encode_file_str(int16_t *audio_samples, int audio_sample_count, settings_t *settings, FILE *output);
+void encode_file_str(int16_t *audio_samples, int audio_sample_count, uint8_t *video_frames, int video_frame_count, settings_t *settings, FILE *output);
 
 // mdec.c
+void encode_block_str(uint8_t *video_frames, uint8_t *output, settings_t *settings);
