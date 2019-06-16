@@ -10,9 +10,12 @@
 *.cue
 
 # Specific output
-bin/iso2raw
 bin/elf2psx
+bin/iso2raw
 bin/pscd-new
+bin/psxavenc
+bin/spuenc
+bin/xainterleave
 
 # VIM
 .*.sw?
