@@ -6,6 +6,7 @@ TOOLS_PSXAVENC_SRCS =
 TOOLS_PSXAVENC_SRCS += toolsrc/psxavenc/adpcm.c
 TOOLS_PSXAVENC_SRCS += toolsrc/psxavenc/cdrom.c
 TOOLS_PSXAVENC_SRCS += toolsrc/psxavenc/filefmt.c
+TOOLS_PSXAVENC_SRCS += toolsrc/psxavenc/mdec.c
 TOOLS_PSXAVENC_SRCS += toolsrc/psxavenc/psxavenc.c
 
 TOOLS_PSXAVENC_INCS =
