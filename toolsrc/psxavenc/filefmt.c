@@ -99,9 +99,15 @@ void encode_file_str(int16_t *audio_samples, int audio_sample_count, uint8_t *vi
 	uint8_t buffer[2352*8];
 	int sample_jump = (settings->bits_per_sample == 8) ? 112 : 224;
 
-	settings->state_vid.frame_index = 1;
+	settings->state_vid.frame_index = 0;
 	settings->state_vid.bits_value = 0;
 	settings->state_vid.bits_left = 16;
+	settings->state_vid.frame_block_index = 0;
+	settings->state_vid.frame_block_count = 0;
+	// 8.75
+	settings->state_vid.frame_block_base_overflow = 8*4 + 3;
+	settings->state_vid.frame_block_overflow_den = 4;
+	settings->state_vid.frame_block_overflow_num = 0;
 
 	init_sector_buffer(buffer + 2352*7, settings, false);
 	for (int i = 0, j = 0; i < audio_sample_count; i += sample_jump, j++) {
