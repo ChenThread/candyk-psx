@@ -335,11 +335,7 @@ int main(int argc, char **argv) {
 	settings.video_height = 240;
 
 	// TODO: make this adjustable
-	// Number of total sectors per second: 150
-	// Proportion of sectors for video due to A/V interleave: 7/8
-	// Target sectors per frame count: 7
-	//settings.video_fps_num = 150*7;
-	//settings.video_fps_den = 7*8;
+	// also for some reason ffmpeg seems to hard-code the framerate to 15fps
 	settings.video_fps_num = 15;
 	settings.video_fps_den = 1;
 	for(int i = 0; i < 6; i++) {

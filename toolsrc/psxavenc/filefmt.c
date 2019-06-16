@@ -104,10 +104,14 @@ void encode_file_str(int16_t *audio_samples, int audio_sample_count, uint8_t *vi
 	settings->state_vid.bits_left = 16;
 	settings->state_vid.frame_block_index = 0;
 	settings->state_vid.frame_block_count = 0;
-	// 8.75
-	settings->state_vid.frame_block_base_overflow = 8*4 + 3;
-	settings->state_vid.frame_block_overflow_den = 4;
+
 	settings->state_vid.frame_block_overflow_num = 0;
+
+	// Number of total sectors per second: 150
+	// Proportion of sectors for video due to A/V interleave: 7/8
+	// 15FPS = (150*7/8/15) = 8.75 blocks per frame
+	settings->state_vid.frame_block_base_overflow = 150*7*settings->video_fps_den;
+	settings->state_vid.frame_block_overflow_den = 8*settings->video_fps_num;
 
 	init_sector_buffer(buffer + 2352*7, settings, false);
 	for (int i = 0, j = 0; i < audio_sample_count; i += sample_jump, j++) {
