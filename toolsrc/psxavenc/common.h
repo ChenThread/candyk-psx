@@ -22,6 +22,7 @@ Copyright (c) 2019 Ben "GreaseMonkey" Russell
 #define FORMAT_XA 0
 #define FORMAT_XACD 1
 #define FORMAT_SPU 2
+#define FORMAT_STR2 3
 
 #define ADPCM_FILTER_COUNT 5
 #define XA_ADPCM_FILTER_COUNT 4
@@ -34,7 +35,7 @@ typedef struct {
 } encoder_state_t;
 
 typedef struct {
-	int format; // FORMAT_XA, FORMAT_XACD or FORMAT_SPU
+	int format; // FORMAT_*
 	bool stereo; // false or true
 	int frequency; // 18900 or 37800 Hz
 	int bits_per_sample; // 4 or 8
@@ -53,5 +54,8 @@ void init_sector_buffer(uint8_t *buffer, settings_t *settings);
 void calculate_edc_xa(uint8_t *buffer);
 
 // filefmt.c
-void encode_file_spu(int16_t *samples, int sample_count, settings_t *settings, FILE *output);
-void encode_file_xa(int16_t *samples, int sample_count, settings_t *settings, FILE *output);
+void encode_file_spu(int16_t *audio_samples, int audio_sample_count, settings_t *settings, FILE *output);
+void encode_file_xa(int16_t *audio_samples, int audio_sample_count, settings_t *settings, FILE *output);
+void encode_file_str(int16_t *audio_samples, int audio_sample_count, settings_t *settings, FILE *output);
+
+// mdec.c

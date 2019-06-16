@@ -25,7 +25,7 @@ int decode_frame(AVCodecContext *codec, AVFrame *frame, int *frame_size, AVPacke
 	}
 }
 
-int16_t *load_samples(const char *filename, int *sample_count, settings_t *settings) {
+bool load_av_data(const char *filename, settings_t *settings, int *audio_sample_count, int16_t **audio_buffer, int *video_frame_count, uint8_t **video_buffer) {
 	int i, stream_index, frame_size, frame_sample_count, sample_count_mul;
 	AVFormatContext* format;
 	AVStream* stream;
@@ -34,7 +34,6 @@ int16_t *load_samples(const char *filename, int *sample_count, settings_t *setti
 	struct SwrContext* resampler;
 	AVPacket packet;
 	AVFrame* frame;
-	int16_t *out, *out_loc;
 	uint8_t *buffer[1];
 
 	format = avformat_alloc_context();
@@ -49,7 +48,7 @@ int16_t *load_samples(const char *filename, int *sample_count, settings_t *setti
 	for (i = 0; i < format->nb_streams; i++) {
 		if (format->streams[i]->codecpar->codec_type == AVMEDIA_TYPE_AUDIO) {
 			if (stream_index >= 0) {
-				fprintf(stderr, "load_samples: found multiple audio tracks?\n");
+				fprintf(stderr, "load_av_data: found multiple audio tracks?\n");
 				return NULL;
 			}
 			stream_index = i;
@@ -96,8 +95,10 @@ int16_t *load_samples(const char *filename, int *sample_count, settings_t *setti
 		return NULL;
 	}
 
-	out = NULL;
-	*sample_count = 0;
+	*audio_buffer = NULL;
+	*audio_sample_count = 0;
+	*video_buffer = NULL;
+	*video_frame_count = 0;
 
 	while (av_read_frame(format, &packet) >= 0) {
 		if (decode_frame(codec_context, frame, &frame_size, &packet)) {
@@ -105,16 +106,16 @@ int16_t *load_samples(const char *filename, int *sample_count, settings_t *setti
 			buffer[0] = malloc(buffer_size);
 			memset(buffer[0], 0, buffer_size);
 			frame_sample_count = swr_convert(resampler, buffer, frame->nb_samples, (const uint8_t**)frame->data, frame->nb_samples);
-			out = realloc(out, (*sample_count + ((frame_sample_count + 4032) * sample_count_mul)) * sizeof(int16_t));
-			memmove(&out[*sample_count], buffer[0], sizeof(int16_t) * frame_sample_count * sample_count_mul);
-			*sample_count += frame_sample_count * sample_count_mul;
+			*audio_buffer = realloc(*audio_buffer, (*audio_sample_count + ((frame_sample_count + 4032) * sample_count_mul)) * sizeof(int16_t));
+			memmove(&((*audio_buffer)[*audio_sample_count]), buffer[0], sizeof(int16_t) * frame_sample_count * sample_count_mul);
+			*audio_sample_count += frame_sample_count * sample_count_mul;
 			free(buffer[0]);
 		}
 	}
 
 	// out is always padded out with 4032 "0" samples, this makes calculations elsewhere easier
 	// and is mostly irrelevant as we load the whole thing into memory anyway at this time
-	memset(out + (*sample_count), 0, 4032 * sample_count_mul * sizeof(int16_t));
+	memset((*audio_buffer) + (*audio_sample_count), 0, 4032 * sample_count_mul * sizeof(int16_t));
 
 	av_frame_free(&frame);
 	swr_free(&resampler);
@@ -122,16 +123,17 @@ int16_t *load_samples(const char *filename, int *sample_count, settings_t *setti
 	avcodec_free_context(&codec_context);
 	avformat_free_context(format);
 
-	return out;
+	return true;
 }
 
 void print_help() {
 	printf("Usage: psxavenc [-f freq] [-b bitdepth] [-c channels] [-F num] [-C num] [-t xa|spu] <in> <out>\n\n");
 	printf("    -f freq          Use specified frequency\n");
-	printf("    -t xa|xacd|spu   Use specified output type:\n");
-	printf("                       xa     .xa 2336-byte sectors\n");
-	printf("                       xacd   .xa 2352-byte sectors\n");
-	printf("                       spu    raw SPU-ADPCM data\n");
+	printf("    -t format        Use specified output type:\n");
+	printf("                       xa     [A.] .xa 2336-byte sectors\n");
+	printf("                       xacd   [A.] .xa 2352-byte sectors\n");
+	printf("                       spu    [A.] raw SPU-ADPCM data\n");
+	printf("                       str2   [AV] v2 .str video 2352-byte sectors\n");
 	printf("    -b bitdepth      Use specified bit depth (only 4 bits supported)\n");
 	printf("    -c channels      Use specified channel count (1 or 2)\n");
 	printf("    -F num           [.xa] Set the file number to num (0-255)\n");
@@ -149,6 +151,8 @@ int parse_args(settings_t* settings, int argc, char** argv) {
 					settings->format = FORMAT_XACD;
 				} else if (strcmp(optarg, "spu") == 0) {
 					settings->format = FORMAT_SPU;
+				} else if (strcmp(optarg, "str") == 0) {
+					settings->format = FORMAT_STR2;
 				} else {
 					fprintf(stderr, "Invalid format: %s\n", optarg);
 					return -1;
@@ -210,8 +214,11 @@ int parse_args(settings_t* settings, int argc, char** argv) {
 
 int main(int argc, char **argv) {
 	settings_t settings;
-	int sample_count, arg_offset;
-	int16_t *buffer;
+	int arg_offset;
+	int audio_sample_count = 0;
+	int16_t *audio_buffer = NULL;
+	int video_frame_count = 0;
+	uint8_t *video_buffer = NULL;
 	FILE* output;
 
 	memset(&settings,0,sizeof(settings_t));
@@ -236,13 +243,13 @@ int main(int argc, char **argv) {
 		settings.file_number, settings.channel_number
 	);
 
-	buffer = load_samples(argv[arg_offset + 0], &sample_count, &settings);
-	if (buffer == NULL) {
+	bool did_load_data = load_av_data(argv[arg_offset + 0], &settings, &audio_sample_count, &audio_buffer, &video_frame_count, &video_buffer);
+	if (audio_buffer == NULL) {
 		fprintf(stderr, "Could not open input file!\n");
 		return 1;
 	}
 
-	printf("Loaded %d samples.\n", sample_count);
+	printf("Loaded %d samples.\n", audio_sample_count);
 
 	output = fopen(argv[arg_offset + 1], "wb");
 	if (output == NULL) {
@@ -253,14 +260,24 @@ int main(int argc, char **argv) {
 	switch (settings.format) {
 		case FORMAT_XA:
 		case FORMAT_XACD:
-			encode_file_xa(buffer, sample_count, &settings, output);
+			encode_file_xa(audio_buffer, audio_sample_count, &settings, output);
 			break;
 		case FORMAT_SPU:
-			encode_file_spu(buffer, sample_count, &settings, output);
+			encode_file_spu(audio_buffer, audio_sample_count, &settings, output);
+			break;
+		case FORMAT_STR2:
+			encode_file_str(audio_buffer, audio_sample_count, &settings, output);
 			break;
 	}
 
 	fclose(output);
-	free(buffer);
+	if(audio_buffer != NULL) {
+		free(audio_buffer);
+		audio_buffer = NULL;
+	}
+	if(video_buffer != NULL) {
+		free(video_buffer);
+		video_buffer = NULL;
+	}
 	return 0;
 }
