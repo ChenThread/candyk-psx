@@ -158,8 +158,7 @@ int main(int argc, char **argv) {
 			encode_file_spu(settings.audio_samples, settings.audio_sample_count, &settings, output);
 			break;
 		case FORMAT_STR2:
-			pull_all_av_data(&settings);
-			encode_file_str(settings.audio_samples, settings.audio_sample_count, settings.video_frames, settings.video_frame_count, &settings, output);
+			encode_file_str(&settings, output);
 			break;
 	}
 

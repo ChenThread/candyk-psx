@@ -266,11 +266,17 @@ bool ensure_av_data(settings_t *settings, int needed_audio_samples, int needed_v
 	//
 	av_decoder_state_t* av = &(settings->decoder_state_av);
 
-	while (settings->audio_sample_count < needed_audio_samples && settings->video_frame_count < needed_video_frames) {
-		assert(!"TODO!");
-	}
 
-	return false;
+	while (settings->audio_sample_count < needed_audio_samples || settings->video_frame_count < needed_video_frames) {
+		//fprintf(stderr, "ensure %d -> %d, %d -> %d\n", settings->audio_sample_count, needed_audio_samples, settings->video_frame_count, needed_video_frames);
+		if(!poll_av_data(settings)) {
+			//fprintf(stderr, "cannot ensure\n");
+			return false;
+		}
+	}
+	//fprintf(stderr, "ensure %d -> %d, %d -> %d\n", settings->audio_sample_count, needed_audio_samples, settings->video_frame_count, needed_video_frames);
+
+	return true;
 }
 
 void pull_all_av_data(settings_t *settings)
@@ -285,7 +291,23 @@ void pull_all_av_data(settings_t *settings)
 
 void retire_av_data(settings_t *settings, int retired_audio_samples, int retired_video_frames)
 {
-	assert(!"TODO!");
+	av_decoder_state_t* av = &(settings->decoder_state_av);
+
+	//fprintf(stderr, "retire %d -> %d, %d -> %d\n", settings->audio_sample_count, retired_audio_samples, settings->video_frame_count, retired_video_frames);
+	assert(retired_audio_samples <= settings->audio_sample_count);
+	assert(retired_video_frames <= settings->video_frame_count);
+
+	int sample_size = sizeof(int16_t);
+	if (settings->audio_sample_count > retired_audio_samples) {
+		memmove(settings->audio_samples, settings->audio_samples + retired_audio_samples, (settings->audio_sample_count - retired_audio_samples)*sample_size);
+		settings->audio_sample_count -= retired_audio_samples;
+	}
+
+	int frame_size = av->video_frame_dst_size;
+	if (settings->video_frame_count > retired_video_frames) {
+		memmove(settings->video_frames, settings->video_frames + retired_video_frames*frame_size, (settings->video_frame_count - retired_video_frames)*frame_size);
+		settings->video_frame_count -= retired_video_frames;
+	}
 }
 
 void close_av_data(settings_t *settings)
