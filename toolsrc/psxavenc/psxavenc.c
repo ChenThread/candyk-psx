@@ -44,7 +44,7 @@ int decode_video_frame(AVCodecContext *codec, AVFrame *frame, int *frame_size, A
 	}
 }
 
-bool load_av_data(const char *filename, settings_t *settings) {
+bool open_av_data(const char *filename, settings_t *settings) {
 	int frame_size, frame_sample_count, sample_count_mul;
 	AVPacket packet;
 	AVFrame* frame;
@@ -77,7 +77,7 @@ bool load_av_data(const char *filename, settings_t *settings) {
 	for (int i = 0; i < av->format->nb_streams; i++) {
 		if (av->format->streams[i]->codecpar->codec_type == AVMEDIA_TYPE_AUDIO) {
 			if (av->audio_stream_index >= 0) {
-				fprintf(stderr, "load_av_data: found multiple audio tracks?\n");
+				fprintf(stderr, "open_av_data: found multiple audio tracks?\n");
 				return false;
 			}
 			av->audio_stream_index = i;
@@ -90,7 +90,7 @@ bool load_av_data(const char *filename, settings_t *settings) {
 	for (int i = 0; i < av->format->nb_streams; i++) {
 		if (av->format->streams[i]->codecpar->codec_type == AVMEDIA_TYPE_VIDEO) {
 			if (av->video_stream_index >= 0) {
-				fprintf(stderr, "load_av_data: found multiple video tracks?\n");
+				fprintf(stderr, "open_av_data: found multiple video tracks?\n");
 				return false;
 			}
 			av->video_stream_index = i;
@@ -226,12 +226,27 @@ bool load_av_data(const char *filename, settings_t *settings) {
 	memset((settings->audio_samples) + (settings->audio_sample_count), 0, 4032 * sample_count_mul * sizeof(int16_t));
 
 	av_frame_free(&(frame));
+
+	return true;
+}
+
+void close_av_data(settings_t *settings)
+{
+	av_decoder_state_t* av = &(settings->decoder_state_av);
+
 	swr_free(&(av->resampler));
 	avcodec_close(av->audio_codec_context);
 	avcodec_free_context(&(av->audio_codec_context));
 	avformat_free_context(av->format);
 
-	return true;
+	if(settings->audio_samples != NULL) {
+		free(settings->audio_samples);
+		settings->audio_samples = NULL;
+	}
+	if(settings->video_frames != NULL) {
+		free(settings->video_frames);
+		settings->video_frames = NULL;
+	}
 }
 
 void print_help() {
@@ -363,7 +378,7 @@ int main(int argc, char **argv) {
 		settings.file_number, settings.channel_number
 	);
 
-	bool did_load_data = load_av_data(argv[arg_offset + 0], &settings);
+	bool did_open_data = open_av_data(argv[arg_offset + 0], &settings);
 	if (settings.audio_samples == NULL) {
 		fprintf(stderr, "Could not open input file!\n");
 		return 1;
@@ -392,13 +407,6 @@ int main(int argc, char **argv) {
 	}
 
 	fclose(output);
-	if(settings.audio_samples != NULL) {
-		free(settings.audio_samples);
-		settings.audio_samples = NULL;
-	}
-	if(settings.video_frames != NULL) {
-		free(settings.video_frames);
-		settings.video_frames = NULL;
-	}
+	close_av_data(&settings);
 	return 0;
 }
