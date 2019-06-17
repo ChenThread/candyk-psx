@@ -292,7 +292,7 @@ static void encode_dct_block(vid_encoder_state_t *state, int32_t *block)
 		encode_ac_value(state, zero_rle_data[i]);
 	}
 
-	//printf("dc %08X rles %2d\n", dc_value, zero_rle_words);
+	//fprintf(stderr, "dc %08X rles %2d\n", dc_value, zero_rle_words);
 	//assert(dc_value >= -0x200); assert(dc_value <  +0x200);
 
 	// Store end of block
