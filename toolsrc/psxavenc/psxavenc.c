@@ -184,6 +184,11 @@ bool load_av_data(const char *filename, settings_t *settings, int *audio_sample_
 				// FIXME: increasing framerate doesn't fill it in with duplicate frames!
 				double pts = (((double)frame->pts)*(double)video_stream->time_base.num)/video_stream->time_base.den;
 				//printf("%f\n", pts);
+				// Drop frames with negative PTS values
+				if(pts < 0.0) {
+					// do nothing
+					continue;
+				}
 				if((*video_frame_count) >= 1 && pts < video_next_pts) {
 					// do nothing
 					continue;
@@ -192,8 +197,8 @@ bool load_av_data(const char *filename, settings_t *settings, int *audio_sample_
 					video_next_pts = pts;
 				}
 
-				//printf("%f %f\n", pts, ((double)1.0*settings->video_fps_den)/settings->video_fps_num);
-				video_next_pts += ((double)1.0*settings->video_fps_den)/settings->video_fps_num;
+				//printf("%d %f %f %f\n", (*video_frame_count), pts, video_next_pts, ((double)1.0*settings->video_fps_den)/settings->video_fps_num);
+				video_next_pts += ((double)1.0*(double)settings->video_fps_den)/(double)settings->video_fps_num;
 				//size_t buffer_size = frame_count_mul;
 				//buffer[0] = malloc(buffer_size);
 				//memset(buffer[0], 0, buffer_size);
