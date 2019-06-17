@@ -252,6 +252,7 @@ bool poll_av_data(settings_t *settings)
 
 	if (av_read_frame(av->format, &packet) >= 0) {
 		poll_av_packet(settings, &packet);
+		av_packet_unref(&packet);
 		return true;
 	} else {
 		// out is always padded out with 4032 "0" samples, this makes calculations elsewhere easier
