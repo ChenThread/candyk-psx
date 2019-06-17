@@ -107,6 +107,12 @@ void init_sector_buffer(uint8_t *buffer, settings_t *settings, bool is_video);
 void calculate_edc_xa(uint8_t *buffer);
 void calculate_edc_data(uint8_t *buffer);
 
+// decoding.c
+bool open_av_data(const char *filename, settings_t *settings);
+bool poll_av_data(settings_t *settings);
+bool ensure_av_data(settings_t *settings, int needed_audio_samples, int needed_video_frames);
+void close_av_data(settings_t *settings);
+
 // filefmt.c
 void encode_file_spu(int16_t *audio_samples, int audio_sample_count, settings_t *settings, FILE *output);
 void encode_file_xa(int16_t *audio_samples, int audio_sample_count, settings_t *settings, FILE *output);
@@ -114,9 +120,3 @@ void encode_file_str(int16_t *audio_samples, int audio_sample_count, uint8_t *vi
 
 // mdec.c
 void encode_block_str(uint8_t *video_frames, int video_frame_count, uint8_t *output, settings_t *settings);
-
-// TODO: move this to a new file
-bool open_av_data(const char *filename, settings_t *settings);
-bool poll_av_data(settings_t *settings);
-bool ensure_av_data(settings_t *settings, int needed_audio_samples, int needed_video_frames);
-void close_av_data(settings_t *settings);
