@@ -112,10 +112,14 @@ void encode_file_str(settings_t *settings, FILE *output) {
 	// 15FPS = (150*7/8/15) = 8.75 blocks per frame
 	settings->state_vid.frame_block_base_overflow = 150*7*settings->video_fps_den;
 	settings->state_vid.frame_block_overflow_den = 8*settings->video_fps_num;
+	//fprintf(stderr, "%f\n", ((double)settings->state_vid.frame_block_base_overflow)/((double)settings->state_vid.frame_block_overflow_den)); abort();
 
 	init_sector_buffer(buffer + 2352*7, settings, false);
 	//for (int i = 0, j = 0; i < audio_sample_count; i += sample_jump, j++) {
-	for (int j = 0; ensure_av_data(settings, sample_jump*18, 1); j++) {
+
+	// FIXME: this needs an extra frame to prevent A/V desync
+	const int frames_needed = 2;
+	for (int j = 0; ensure_av_data(settings, sample_jump*18*frames_needed, 1*frames_needed); j++) {
 
 		uint8_t *data = buffer + 2352*7 + 0x18 + ((j%18) * 0x80);
 
