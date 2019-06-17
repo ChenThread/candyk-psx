@@ -67,6 +67,11 @@ typedef struct {
 	AVCodec* video_codec;
 	struct SwrContext* resampler;
 	struct SwsContext* scaler;
+	AVFrame* frame;
+
+	int sample_count_mul;
+
+	double video_next_pts;
 } av_decoder_state_t;
 
 typedef struct {
@@ -109,3 +114,9 @@ void encode_file_str(int16_t *audio_samples, int audio_sample_count, uint8_t *vi
 
 // mdec.c
 void encode_block_str(uint8_t *video_frames, int video_frame_count, uint8_t *output, settings_t *settings);
+
+// TODO: move this to a new file
+bool open_av_data(const char *filename, settings_t *settings);
+bool poll_av_data(settings_t *settings);
+bool ensure_av_data(settings_t *settings, int needed_audio_samples, int needed_video_frames);
+void close_av_data(settings_t *settings);
