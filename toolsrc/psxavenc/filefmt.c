@@ -95,7 +95,7 @@ void encode_file_xa(int16_t *audio_samples, int audio_sample_count, settings_t *
 	}
 }
 
-void encode_file_str(int16_t *audio_samples, int audio_sample_count, uint8_t *video_frames, int video_frame_count, settings_t *settings, FILE *output) {
+void encode_file_str(settings_t *settings, FILE *output) {
 	uint8_t buffer[2352*8];
 	int sample_jump = (settings->bits_per_sample == 8) ? 112 : 224;
 
@@ -114,26 +114,32 @@ void encode_file_str(int16_t *audio_samples, int audio_sample_count, uint8_t *vi
 	settings->state_vid.frame_block_overflow_den = 8*settings->video_fps_num;
 
 	init_sector_buffer(buffer + 2352*7, settings, false);
-	for (int i = 0, j = 0; i < audio_sample_count; i += sample_jump, j++) {
+	//for (int i = 0, j = 0; i < audio_sample_count; i += sample_jump, j++) {
+	for (int j = 0; ensure_av_data(settings, sample_jump*18, 1); j++) {
 
 		uint8_t *data = buffer + 2352*7 + 0x18 + ((j%18) * 0x80);
 
-		encode_block_xa(audio_samples + i, data, settings);
+		//encode_block_xa(audio_samples + i, data, settings);
+		encode_block_xa(settings->audio_samples + (j%18)*sample_jump, data, settings);
 
 		memcpy(data + 4, data, 4);
 		memcpy(data + 12, data + 8, 4);
 
-		if ((i + sample_jump) >= audio_sample_count) {
+		// TODO: the final buffer
+#if 0
+		if ((i + sample_jump) >= settings->audio_sample_count) {
 			// next written buffer is final
 			buffer[2352*7 + 0x12] |= 0x80;
 			buffer[2352*7 + 0x16] |= 0x80;
 		}
+#endif
 
-		if ((j+1)%18 == 0 || i + sample_jump >= audio_sample_count) {
+		//if ((j+1)%18 == 0 || i + sample_jump >= settings->audio_sample_count) {
+		if ((j+1)%18 == 0) {
 			for(int k = 0; k < 7; k++) {
 				init_sector_buffer(buffer + 2352*k, settings, true);
 			}
-			encode_block_str(video_frames, video_frame_count, buffer, settings);
+			encode_block_str(settings->video_frames, settings->video_frame_count, buffer, settings);
 			for(int k = 0; k < 8; k++) {
 				int t = k + (j/18)*8 + 75*2;
 
@@ -147,6 +153,7 @@ void encode_file_str(int16_t *audio_samples, int audio_sample_count, uint8_t *vi
 				}
 			}
 			calculate_edc_xa(buffer + 2352*7);
+			retire_av_data(settings, sample_jump*18, 0);
 			fwrite(buffer, 2352*8, 1, output);
 			init_sector_buffer(buffer + 2352*7, settings, false);
 		}

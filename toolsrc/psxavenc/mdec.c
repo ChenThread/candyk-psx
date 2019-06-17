@@ -331,7 +331,8 @@ static void encode_frame_str(uint8_t *video_frames, int video_frame_count, uint8
 	if (real_index > video_frame_count-1) {
 		real_index = video_frame_count-1;
 	}
-	uint8_t *video_frame = video_frames + settings->video_width*settings->video_height*4*real_index;
+	//uint8_t *video_frame = video_frames + settings->video_width*settings->video_height*4*real_index;
+	uint8_t *video_frame = video_frames;
 
 	if (settings->state_vid.dct_block_lists[0] == NULL) {
 		int dct_block_count_x = (settings->video_width+15)/16;
@@ -491,6 +492,7 @@ static void encode_frame_str(uint8_t *video_frames, int video_frame_count, uint8
 	settings->state_vid.unmuxed[0x006] = 0x02; // Version 2
 	settings->state_vid.unmuxed[0x007] = 0x00;
 
+	retire_av_data(settings, 0, 1);
 }
 
 void encode_block_str(uint8_t *video_frames, int video_frame_count, uint8_t *output, settings_t *settings)
