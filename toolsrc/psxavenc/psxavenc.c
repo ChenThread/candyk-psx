@@ -44,16 +44,16 @@ int decode_video_frame(AVCodecContext *codec, AVFrame *frame, int *frame_size, A
 	}
 }
 
-bool load_av_data(const char *filename, settings_t *settings, int *audio_sample_count, int16_t **audio_samples, int *video_frame_count, uint8_t **video_frames) {
+bool load_av_data(const char *filename, settings_t *settings) {
 	int frame_size, frame_sample_count, sample_count_mul;
-	int video_frame_src_size = 0;
-	int video_frame_dst_size = 0;
 	AVPacket packet;
 	AVFrame* frame;
 	uint8_t *buffer[1];
 	double video_next_pts = 0.0;
 
 	av_decoder_state_t* av = &(settings->decoder_state_av);
+	av->video_frame_src_size = 0;
+	av->video_frame_dst_size = 0;
 	av->audio_stream_index = -1;
 	av->video_stream_index = -1;
 	av->format = NULL;
@@ -152,8 +152,8 @@ bool load_av_data(const char *filename, settings_t *settings, int *audio_sample_
 			NULL,
 			NULL);
 		
-		video_frame_src_size = 4*av->video_codec_context->width*av->video_codec_context->height;
-		video_frame_dst_size = 4*settings->video_width*settings->video_height;
+		av->video_frame_src_size = 4*av->video_codec_context->width*av->video_codec_context->height;
+		av->video_frame_dst_size = 4*settings->video_width*settings->video_height;
 	}
 
 	av_init_packet(&packet);
@@ -162,10 +162,10 @@ bool load_av_data(const char *filename, settings_t *settings, int *audio_sample_
 		return false;
 	}
 
-	*audio_samples = NULL;
-	*audio_sample_count = 0;
-	*video_frames = NULL;
-	*video_frame_count = 0;
+	settings->audio_samples = NULL;
+	settings->audio_sample_count = 0;
+	settings->video_frames = NULL;
+	settings->video_frame_count = 0;
 
 	while (av_read_frame(av->format, &packet) >= 0) {
 		if (packet.stream_index == av->audio_stream_index) {
@@ -174,9 +174,9 @@ bool load_av_data(const char *filename, settings_t *settings, int *audio_sample_
 				buffer[0] = malloc(buffer_size);
 				memset(buffer[0], 0, buffer_size);
 				frame_sample_count = swr_convert(av->resampler, buffer, frame->nb_samples, (const uint8_t**)frame->data, frame->nb_samples);
-				*audio_samples = realloc(*audio_samples, (*audio_sample_count + ((frame_sample_count + 4032) * sample_count_mul)) * sizeof(int16_t));
-				memmove(&((*audio_samples)[*audio_sample_count]), buffer[0], sizeof(int16_t) * frame_sample_count * sample_count_mul);
-				*audio_sample_count += frame_sample_count * sample_count_mul;
+				settings->audio_samples = realloc(settings->audio_samples, (settings->audio_sample_count + ((frame_sample_count + 4032) * sample_count_mul)) * sizeof(int16_t));
+				memmove(&(settings->audio_samples[settings->audio_sample_count]), buffer[0], sizeof(int16_t) * frame_sample_count * sample_count_mul);
+				settings->audio_sample_count += frame_sample_count * sample_count_mul;
 				free(buffer[0]);
 			}
 
@@ -191,11 +191,11 @@ bool load_av_data(const char *filename, settings_t *settings, int *audio_sample_
 					// do nothing
 					continue;
 				}
-				if((*video_frame_count) >= 1 && pts < video_next_pts) {
+				if((settings->video_frame_count) >= 1 && pts < video_next_pts) {
 					// do nothing
 					continue;
 				}
-				if((*video_frame_count) < 1) {
+				if((settings->video_frame_count) < 1) {
 					video_next_pts = pts;
 				}
 
@@ -205,17 +205,16 @@ bool load_av_data(const char *filename, settings_t *settings, int *audio_sample_
 				//buffer[0] = malloc(buffer_size);
 				//memset(buffer[0], 0, buffer_size);
 				//frame_sample_count = swr_convert(av->resampler, buffer, frame->nb_samples, (const uint8_t**)frame->data, frame->nb_samples);
-				*video_frames = realloc(*video_frames, (*video_frame_count + 1) * video_frame_dst_size);
+				settings->video_frames = realloc(settings->video_frames, (settings->video_frame_count + 1) * av->video_frame_dst_size);
 				int dst_strides[1] = {
 					settings->video_width*4,
 				};
 				uint8_t *dst_pointers[1] = {
-					(*video_frames) + video_frame_dst_size*(*video_frame_count),
+					(settings->video_frames) + av->video_frame_dst_size*(settings->video_frame_count),
 				};
 				sws_scale(av->scaler, frame->data, frame->linesize, 0, frame->height, dst_pointers, dst_strides);
 
-				//memmove(&((*video_frames)[*video_frame_count]), buffer[0], sizeof(int16_t) * frame_sample_count * sample_count_mul);
-				*video_frame_count += 1;
+				settings->video_frame_count += 1;
 				//free(buffer[0]);
 			}
 
@@ -224,7 +223,7 @@ bool load_av_data(const char *filename, settings_t *settings, int *audio_sample_
 
 	// out is always padded out with 4032 "0" samples, this makes calculations elsewhere easier
 	// and is mostly irrelevant as we load the whole thing into memory anyway at this time
-	memset((*audio_samples) + (*audio_sample_count), 0, 4032 * sample_count_mul * sizeof(int16_t));
+	memset((settings->audio_samples) + (settings->audio_sample_count), 0, 4032 * sample_count_mul * sizeof(int16_t));
 
 	av_frame_free(&(frame));
 	swr_free(&(av->resampler));
@@ -324,10 +323,6 @@ int parse_args(settings_t* settings, int argc, char** argv) {
 int main(int argc, char **argv) {
 	settings_t settings;
 	int arg_offset;
-	int audio_sample_count = 0;
-	int16_t *audio_samples = NULL;
-	int video_frame_count = 0;
-	uint8_t *video_frames = NULL;
 	FILE* output;
 
 	memset(&settings,0,sizeof(settings_t));
@@ -340,6 +335,11 @@ int main(int argc, char **argv) {
 
 	settings.video_width = 320;
 	settings.video_height = 240;
+
+	settings.audio_samples = NULL;
+	settings.audio_sample_count = 0;
+	settings.video_frames = NULL;
+	settings.video_frame_count = 0;
 
 	// TODO: make this adjustable
 	// also for some reason ffmpeg seems to hard-code the framerate to 15fps
@@ -363,13 +363,14 @@ int main(int argc, char **argv) {
 		settings.file_number, settings.channel_number
 	);
 
-	bool did_load_data = load_av_data(argv[arg_offset + 0], &settings, &audio_sample_count, &audio_samples, &video_frame_count, &video_frames);
-	if (audio_samples == NULL) {
+	bool did_load_data = load_av_data(argv[arg_offset + 0], &settings);
+	if (settings.audio_samples == NULL) {
 		fprintf(stderr, "Could not open input file!\n");
 		return 1;
 	}
 
-	printf("Loaded %d samples.\n", audio_sample_count);
+	printf("Loaded %d samples.\n", settings.audio_sample_count);
+	printf("Loaded %d frames.\n", settings.video_frame_count);
 
 	output = fopen(argv[arg_offset + 1], "wb");
 	if (output == NULL) {
@@ -380,24 +381,24 @@ int main(int argc, char **argv) {
 	switch (settings.format) {
 		case FORMAT_XA:
 		case FORMAT_XACD:
-			encode_file_xa(audio_samples, audio_sample_count, &settings, output);
+			encode_file_xa(settings.audio_samples, settings.audio_sample_count, &settings, output);
 			break;
 		case FORMAT_SPU:
-			encode_file_spu(audio_samples, audio_sample_count, &settings, output);
+			encode_file_spu(settings.audio_samples, settings.audio_sample_count, &settings, output);
 			break;
 		case FORMAT_STR2:
-			encode_file_str(audio_samples, audio_sample_count, video_frames, video_frame_count, &settings, output);
+			encode_file_str(settings.audio_samples, settings.audio_sample_count, settings.video_frames, settings.video_frame_count, &settings, output);
 			break;
 	}
 
 	fclose(output);
-	if(audio_samples != NULL) {
-		free(audio_samples);
-		audio_samples = NULL;
+	if(settings.audio_samples != NULL) {
+		free(settings.audio_samples);
+		settings.audio_samples = NULL;
 	}
-	if(video_frames != NULL) {
-		free(video_frames);
-		video_frames = NULL;
+	if(settings.video_frames != NULL) {
+		free(settings.video_frames);
+		settings.video_frames = NULL;
 	}
 	return 0;
 }
