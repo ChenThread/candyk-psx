@@ -111,6 +111,8 @@ void calculate_edc_data(uint8_t *buffer);
 bool open_av_data(const char *filename, settings_t *settings);
 bool poll_av_data(settings_t *settings);
 bool ensure_av_data(settings_t *settings, int needed_audio_samples, int needed_video_frames);
+void pull_all_av_data(settings_t *settings);
+void retire_av_data(settings_t *settings, int retired_audio_samples, int retired_video_frames);
 void close_av_data(settings_t *settings);
 
 // filefmt.c

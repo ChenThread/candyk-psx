@@ -7,17 +7,17 @@ Copyright (c) 2019 Ben "GreaseMonkey" Russell
 #include "common.h"
 
 void print_help(void) {
-	printf("Usage: psxavenc [-f freq] [-b bitdepth] [-c channels] [-F num] [-C num] [-t xa|xacd|spu|str2] <in> <out>\n\n");
-	printf("    -f freq          Use specified frequency\n");
-	printf("    -t format        Use specified output type:\n");
-	printf("                       xa     [A.] .xa 2336-byte sectors\n");
-	printf("                       xacd   [A.] .xa 2352-byte sectors\n");
-	printf("                       spu    [A.] raw SPU-ADPCM data\n");
-	printf("                       str2   [AV] v2 .str video 2352-byte sectors\n");
-	printf("    -b bitdepth      Use specified bit depth (only 4 bits supported)\n");
-	printf("    -c channels      Use specified channel count (1 or 2)\n");
-	printf("    -F num           [.xa] Set the file number to num (0-255)\n");
-	printf("    -C num           [.xa] Set the channel number to num (0-31)\n");
+	fprintf(stderr, "Usage: psxavenc [-f freq] [-b bitdepth] [-c channels] [-F num] [-C num] [-t xa|xacd|spu|str2] <in> <out>\n\n");
+	fprintf(stderr, "    -f freq          Use specified frequency\n");
+	fprintf(stderr, "    -t format        Use specified output type:\n");
+	fprintf(stderr, "                       xa     [A.] .xa 2336-byte sectors\n");
+	fprintf(stderr, "                       xacd   [A.] .xa 2352-byte sectors\n");
+	fprintf(stderr, "                       spu    [A.] raw SPU-ADPCM data\n");
+	fprintf(stderr, "                       str2   [AV] v2 .str video 2352-byte sectors\n");
+	fprintf(stderr, "    -b bitdepth      Use specified bit depth (only 4 bits supported)\n");
+	fprintf(stderr, "    -c channels      Use specified channel count (1 or 2)\n");
+	fprintf(stderr, "    -F num           [.xa] Set the file number to num (0-255)\n");
+	fprintf(stderr, "    -C num           [.xa] Set the channel number to num (0-31)\n");
 }
 
 int parse_args(settings_t* settings, int argc, char** argv) {
@@ -129,20 +129,17 @@ int main(int argc, char **argv) {
 		return 1;
 	}
 
-	printf("Using settings: %d Hz @ %d bit depth, %s. F%d C%d\n",
+	fprintf(stderr, "Using settings: %d Hz @ %d bit depth, %s. F%d C%d\n",
 		settings.frequency, settings.bits_per_sample,
 		settings.stereo ? "stereo" : "mono",
 		settings.file_number, settings.channel_number
 	);
 
 	bool did_open_data = open_av_data(argv[arg_offset + 0], &settings);
-	if (settings.audio_samples == NULL) {
+	if (!did_open_data) {
 		fprintf(stderr, "Could not open input file!\n");
 		return 1;
 	}
-
-	printf("Loaded %d samples.\n", settings.audio_sample_count);
-	printf("Loaded %d frames.\n", settings.video_frame_count);
 
 	output = fopen(argv[arg_offset + 1], "wb");
 	if (output == NULL) {
@@ -153,12 +150,15 @@ int main(int argc, char **argv) {
 	switch (settings.format) {
 		case FORMAT_XA:
 		case FORMAT_XACD:
+			pull_all_av_data(&settings);
 			encode_file_xa(settings.audio_samples, settings.audio_sample_count, &settings, output);
 			break;
 		case FORMAT_SPU:
+			pull_all_av_data(&settings);
 			encode_file_spu(settings.audio_samples, settings.audio_sample_count, &settings, output);
 			break;
 		case FORMAT_STR2:
+			pull_all_av_data(&settings);
 			encode_file_str(settings.audio_samples, settings.audio_sample_count, settings.video_frames, settings.video_frame_count, &settings, output);
 			break;
 	}

@@ -46,7 +46,8 @@ int decode_video_frame(AVCodecContext *codec, AVFrame *frame, int *frame_size, A
 	}
 }
 
-bool open_av_data(const char *filename, settings_t *settings) {
+bool open_av_data(const char *filename, settings_t *settings)
+{
 	AVPacket packet;
 
 	av_decoder_state_t* av = &(settings->decoder_state_av);
@@ -167,14 +168,6 @@ bool open_av_data(const char *filename, settings_t *settings) {
 	settings->video_frames = NULL;
 	settings->video_frame_count = 0;
 
-	while (poll_av_data(settings)) {
-		// do nothing
-	}
-
-	// out is always padded out with 4032 "0" samples, this makes calculations elsewhere easier
-	// and is mostly irrelevant as we load the whole thing into memory anyway at this time
-	memset((settings->audio_samples) + (settings->audio_sample_count), 0, 4032 * av->sample_count_mul * sizeof(int16_t));
-
 	return true;
 }
 
@@ -211,7 +204,7 @@ static void poll_av_packet_video(settings_t *settings, AVPacket *packet)
 			// do nothing
 			return;
 		}
-		//printf("%f\n", pts);
+		//fprintf(stderr, "%f\n", pts);
 		if((settings->video_frame_count) >= 1 && pts < av->video_next_pts) {
 			// do nothing
 			return;
@@ -221,7 +214,7 @@ static void poll_av_packet_video(settings_t *settings, AVPacket *packet)
 		}
 
 		double pts_step = ((double)1.0*(double)settings->video_fps_den)/(double)settings->video_fps_num;
-		//printf("%d %f %f %f\n", (settings->video_frame_count), pts, av->video_next_pts, pts_step);
+		//fprintf(stderr, "%d %f %f %f\n", (settings->video_frame_count), pts, av->video_next_pts, pts_step);
 		av->video_next_pts += pts_step;
 		//size_t buffer_size = frame_count_mul;
 		//buffer[0] = malloc(buffer_size);
@@ -261,6 +254,9 @@ bool poll_av_data(settings_t *settings)
 		poll_av_packet(settings, &packet);
 		return true;
 	} else {
+		// out is always padded out with 4032 "0" samples, this makes calculations elsewhere easier
+		memset((settings->audio_samples) + (settings->audio_sample_count), 0, 4032 * av->sample_count_mul * sizeof(int16_t));
+
 		return false;
 	}
 }
@@ -275,7 +271,21 @@ bool ensure_av_data(settings_t *settings, int needed_audio_samples, int needed_v
 	}
 
 	return false;
+}
 
+void pull_all_av_data(settings_t *settings)
+{
+	while (poll_av_data(settings)) {
+		// do nothing
+	}
+
+	fprintf(stderr, "Loaded %d samples.\n", settings->audio_sample_count);
+	fprintf(stderr, "Loaded %d frames.\n", settings->video_frame_count);
+}
+
+void retire_av_data(settings_t *settings, int retired_audio_samples, int retired_video_frames)
+{
+	assert(!"TODO!");
 }
 
 void close_av_data(settings_t *settings)
