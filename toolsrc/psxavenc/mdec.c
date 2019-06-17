@@ -6,6 +6,11 @@ Copyright (c) 2019 Ben "GreaseMonkey" Russell
 
 #include "common.h"
 
+// high 8 bits = bit count
+// low 24 bits = value
+uint32_t huffman_encoding_map[0x10000];
+bool dct_done_init = false;
+
 #define MAKE_HUFFMAN_PAIR(zeroes, value) (((zeroes)<<10)|((+(value))&0x3FF)),(((zeroes)<<10)|((-(value))&0x3FF))
 const struct {
 	int c_bits;
@@ -172,6 +177,21 @@ const int16_t dct_scale_table[8*8] = {
 	+0x18F8, -0x471D, +0x6A6D, -0x7D8B, +0x7D8A, -0x6A6E, +0x471C, -0x18F9,
 };
 
+static void init_dct_data(void)
+{
+	for(int i = 0; i <= 0xFFFF; i++) {
+		huffman_encoding_map[i] = ((6+16)<<24)|((0x01<<16)|(i));
+	}
+
+	for(int i = 0; i < sizeof(huffman_lookup)/sizeof(huffman_lookup[0]); i++) {
+		int bits = huffman_lookup[i].c_bits+1;
+		uint32_t base_value = huffman_lookup[i].c_value;
+		huffman_encoding_map[huffman_lookup[i].u_hword_pos] = (bits<<24)|(base_value<<1)|0;
+		huffman_encoding_map[huffman_lookup[i].u_hword_neg] = (bits<<24)|(base_value<<1)|1;
+	}
+
+}
+
 static void flush_bits(vid_encoder_state_t *state)
 {
 	if(state->bits_left < 16) {
@@ -189,37 +209,71 @@ static void encode_bits(vid_encoder_state_t *state, int bits, uint32_t val)
 {
 	assert(val < (1<<bits));
 
-	while(bits > state->bits_left) {
-		state->bits_value |= (uint16_t)((val<<state->bits_left)>>bits);
-		bits -= state->bits_left;
-		val &= (1<<bits)-1;
+	// FIXME: for some reason the main logic breaks when bits > 16
+	// and I have no idea why, so I have to split this up --GM
+	if (bits > 16) {
+		encode_bits(state, bits-16, val>>16);
+		bits = 16;
+		val &= 0xFFFF;
+	}
+
+	if (state->bits_left == 0) {
 		flush_bits(state);
 	}
 
-	state->bits_value |= (uint16_t)((val<<state->bits_left)>>bits);
-	state->bits_left -= bits;
+	while (bits > state->bits_left) {
+		// Bits need truncating
+		uint32_t outval = val;
+		outval >>= bits - state->bits_left;
+		assert(outval < (1<<16));
+		uint16_t old_value = state->bits_value;
+		assert((state->bits_value & outval) == 0);
+		state->bits_value |= (uint16_t)outval;
+		//fprintf(stderr, "trunc %2d %2d %08X %04X %04X\n", bits, state->bits_left, val, old_value, state->bits_value);
+		bits -= state->bits_left;
+		uint32_t mask = (1<<bits)-1;
+		val &= mask;
+		assert(mask >= 1);
+		assert(val < (1<<bits));
+		flush_bits(state);
+	}
+
+	if (bits >= 1) {
+		assert(bits <= 16);
+		// Bits may need shifting into place
+		uint32_t outval = val;
+		outval <<= state->bits_left - bits;
+		assert(outval < (1<<16));
+		uint16_t old_value = state->bits_value;
+		assert((state->bits_value & outval) == 0);
+		state->bits_value |= (uint16_t)outval;
+		//fprintf(stderr, "plop  %2d %2d %08X %04X %04X\n", bits, state->bits_left, val, state->bits_value);
+		state->bits_left -= bits;
+	}
 }
 
 static void encode_ac_value(vid_encoder_state_t *state, uint16_t value)
 {
 	assert(0 <= value && value <= 0xFFFF);
 
+#if 0
 	for(int i = 0; i < sizeof(huffman_lookup)/sizeof(huffman_lookup[0]); i++) {
 		if(value == huffman_lookup[i].u_hword_pos) {
-			encode_bits(state, huffman_lookup[i].c_bits, huffman_lookup[i].c_value);
-			encode_bits(state, 1, 0);
+			encode_bits(state, huffman_lookup[i].c_bits+1, (((uint32_t)huffman_lookup[i].c_value)<<1)|0);
 			return;
 		}
 		else if(value == huffman_lookup[i].u_hword_neg) {
-			encode_bits(state, huffman_lookup[i].c_bits, huffman_lookup[i].c_value);
-			encode_bits(state, 1, 1);
+			encode_bits(state, huffman_lookup[i].c_bits+1, (((uint32_t)huffman_lookup[i].c_value)<<1)|1);
 			return;
 		}
 	}
 
 	// Use an escape
-	encode_bits(state, 6, 0x01);
-	encode_bits(state, 16, value);
+	encode_bits(state, 6+16, (0x01<<16)|(0xFFFF&(uint32_t)value));
+#else
+	uint32_t outword = huffman_encoding_map[value];
+	encode_bits(state, outword>>24, outword&0xFFFFFF);
+#endif
 }
 
 static void transform_dct_block(vid_encoder_state_t *state, int32_t *block)
@@ -334,6 +388,11 @@ static void encode_frame_str(uint8_t *video_frames, int video_frame_count, uint8
 	//uint8_t *video_frame = video_frames + settings->video_width*settings->video_height*4*real_index;
 	uint8_t *video_frame = video_frames;
 
+	if (!dct_done_init) {
+		init_dct_data();
+		dct_done_init = true;
+	}
+
 	if (settings->state_vid.dct_block_lists[0] == NULL) {
 		int dct_block_count_x = (settings->video_width+15)/16;
 		int dct_block_count_y = (settings->video_height+15)/16;
@@ -421,6 +480,7 @@ static void encode_frame_str(uint8_t *video_frames, int video_frame_count, uint8
 	// TODO: Base this on actual bit count
 	//const int accum_threshold = 6500;
 	const int accum_threshold = 1025*settings->state_vid.frame_block_count;
+	//const int accum_threshold = 900*settings->state_vid.frame_block_count;
 	int values_to_shed = 0;
 	for(int min_val = 0;; min_val += 1) {
 		int accum = 0;

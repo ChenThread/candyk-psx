@@ -197,14 +197,13 @@ static void poll_av_packet_video(settings_t *settings, AVPacket *packet)
 	int frame_size;
 
 	if (decode_video_frame(av->video_codec_context, av->frame, &frame_size, packet)) {
-		// FIXME: increasing framerate doesn't fill it in with duplicate frames!
 		double pts = (((double)av->frame->pts)*(double)av->video_stream->time_base.num)/av->video_stream->time_base.den;
+		//fprintf(stderr, "%f\n", pts);
 		// Drop frames with negative PTS values
 		if(pts < 0.0) {
 			// do nothing
 			return;
 		}
-		//fprintf(stderr, "%f\n", pts);
 		if((settings->video_frame_count) >= 1 && pts < av->video_next_pts) {
 			// do nothing
 			return;
@@ -216,6 +215,8 @@ static void poll_av_packet_video(settings_t *settings, AVPacket *packet)
 		double pts_step = ((double)1.0*(double)settings->video_fps_den)/(double)settings->video_fps_num;
 		//fprintf(stderr, "%d %f %f %f\n", (settings->video_frame_count), pts, av->video_next_pts, pts_step);
 		av->video_next_pts += pts_step;
+		// FIXME: increasing framerate doesn't fill it in with duplicate frames!
+		assert(av->video_next_pts > pts);
 		//size_t buffer_size = frame_count_mul;
 		//buffer[0] = malloc(buffer_size);
 		//memset(buffer[0], 0, buffer_size);
