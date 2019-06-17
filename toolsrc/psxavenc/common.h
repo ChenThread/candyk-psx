@@ -54,6 +54,20 @@ typedef struct {
 } vid_encoder_state_t;
 
 typedef struct {
+	int audio_stream_index;
+	int video_stream_index;
+	AVFormatContext* format;
+	AVStream* audio_stream;
+	AVStream* video_stream;
+	AVCodecContext* audio_codec_context;
+	AVCodecContext* video_codec_context;
+	AVCodec* audio_codec;
+	AVCodec* video_codec;
+	struct SwrContext* resampler;
+	struct SwsContext* scaler;
+} av_decoder_state_t;
+
+typedef struct {
 	int format; // FORMAT_*
 	bool stereo; // false or true
 	int frequency; // 18900 or 37800 Hz
@@ -65,6 +79,8 @@ typedef struct {
 	int video_height;
 	int video_fps_num; // FPS numerator
 	int video_fps_den; // FPS denominator
+
+	av_decoder_state_t decoder_state_av;
 
 	aud_encoder_state_t state_left;
 	aud_encoder_state_t state_right;
