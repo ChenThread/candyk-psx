@@ -54,6 +54,8 @@ typedef struct {
 } vid_encoder_state_t;
 
 typedef struct {
+	int video_frame_src_size;
+	int video_frame_dst_size;
 	int audio_stream_index;
 	int video_stream_index;
 	AVFormatContext* format;
@@ -79,6 +81,11 @@ typedef struct {
 	int video_height;
 	int video_fps_num; // FPS numerator
 	int video_fps_den; // FPS denominator
+
+	int16_t *audio_samples;
+	int audio_sample_count;
+	uint8_t *video_frames;
+	int video_frame_count;
 
 	av_decoder_state_t decoder_state_av;
 
