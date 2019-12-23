@@ -250,11 +250,13 @@ void sawpads_do_read_controller(uint8_t port)
 		c->buttons = 0xFFFF;
 	}
 
-	for (int i = 0; i < c->analogs; i++) {
-		if (c->axes[i] > 0x60 && c->axes[i] < 0xA0)
-			c->axes[i] = 0x00;
-		else
-			c->axes[i] ^= 0x80;
+	if (!(c->id == 0x12 && c->hid == 0x5A) /* mouse */) {
+		for (int i = 0; i < c->analogs; i++) {
+			if (c->axes[i] > 0x60 && c->axes[i] < 0xA0)
+				c->axes[i] = 0x00;
+			else
+				c->axes[i] ^= 0x80;
+		}
 	}
 	for (int i = c->analogs; i < 4; i++) {
 		c->axes[i] = 0x00;
