@@ -226,7 +226,7 @@ int main(int argc, char *argv[])
 			, phdr->align
 		);
 
-		if(phdr->type == PT_LOAD) {
+		if(phdr->type == PT_LOAD && phdr->filesz > 0) {
 			if(phdr->vaddr < target_ftext) {
 				target_ftext = phdr->vaddr;
 			}
