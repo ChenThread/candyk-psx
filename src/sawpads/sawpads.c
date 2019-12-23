@@ -233,6 +233,7 @@ void sawpads_do_read_controller(uint8_t port)
 	rumble_buf[0] = c->rumble[0];
 	rumble_buf[1] = c->rumble[1];
 	uint8_t sawpads_words = sawpads_read_words(0x42, port, rumble_buf, 2);
+	c->analogs = 0;
 
 	if(sawpads_words >= 1) {
 		c->buttons = sawpads_buffer[0];
@@ -246,18 +247,19 @@ void sawpads_do_read_controller(uint8_t port)
 				c->axes[3] = sawpads_buffer[2] >> 8;
 			}
 		}
+
+		if (!(c->id == 0x12 && c->hid == 0x5A) /* mouse */) {
+			for (int i = 0; i < c->analogs; i++) {
+				if (c->axes[i] > 0x60 && c->axes[i] < 0xA0)
+					c->axes[i] = 0x00;
+				else
+					c->axes[i] ^= 0x80;
+			}
+		}
 	} else {
 		c->buttons = 0xFFFF;
 	}
 
-	if (!(c->id == 0x12 && c->hid == 0x5A) /* mouse */) {
-		for (int i = 0; i < c->analogs; i++) {
-			if (c->axes[i] > 0x60 && c->axes[i] < 0xA0)
-				c->axes[i] = 0x00;
-			else
-				c->axes[i] ^= 0x80;
-		}
-	}
 	for (int i = c->analogs; i < 4; i++) {
 		c->axes[i] = 0x00;
 	}
