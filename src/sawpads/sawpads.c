@@ -1,6 +1,6 @@
-	/*
+/*
 sawpads: Actually Tested* Joypad Code
-Copyright (C) Chen Thread, 2017, licensed under Creative Commons Zero:
+Copyright (C) Chen Thread, 2017, 2019, licensed under Creative Commons Zero:
 https://creativecommons.org/publicdomain/zero/1.0/
 
 Code by asie and GreaseMonkey,
@@ -17,15 +17,12 @@ the former of whom actually made this code work properly
 #include <psxdefs/intc.h>
 #include <psxdefs/joy.h>
 #include <psxregs.h>
+#include <sawpads.h>
 
-volatile uint8_t sawpads_id = 0;
-volatile uint8_t sawpads_hid = 0;
-volatile uint16_t sawpads_buttons = 0;
-volatile uint8_t sawpads_axes[4];
+volatile sawpads_controller_t sawpads_controller[2];
 volatile uint32_t sawpads_read_counter = 0;
 volatile uint8_t sawpads_has_ack = 0;
 volatile uint16_t sawpads_buffer[16];
-volatile uint8_t sawpads_rumble[2];
 
 static void sawpads_stop_read(void)
 {
@@ -77,9 +74,9 @@ static uint8_t sawpads_send(uint8_t data, bool wait_ack)
 	}
 }
 
-static void sawpads_start_read(void)
+static void sawpads_start_read(uint8_t port)
 {
-	PSXREG_JOY_CTRL = 0x1013;
+	PSXREG_JOY_CTRL = 0x1013 | ((port & 1) << 13);
 
 	// Kill time (more than 2000 cycles is overkill according to nocash)
 	for(uint32_t i = 0; i < 1500; i++) {
@@ -87,19 +84,20 @@ static void sawpads_start_read(void)
 	}
 }
 
-static uint8_t sawpads_read_words(uint8_t cmd, uint8_t* response, int response_len)
+static uint8_t sawpads_read_words(uint8_t cmd, uint8_t port, uint8_t* response, int response_len)
 {
 	uint8_t sawpads_hwords = 0;
+	volatile sawpads_controller_t *c = &sawpads_controller[port];
 
-	sawpads_start_read();
+	sawpads_start_read(port);
 	sawpads_send(0x01, true);
-	sawpads_id = sawpads_send(cmd, true);
-	sawpads_hwords = (uint8_t) sawpads_id;
+	c->id = sawpads_send(cmd, true);
+	sawpads_hwords = (uint8_t) c->id;
 	sawpads_hwords -= 1;
 	sawpads_hwords &= 0x0F;
 	sawpads_hwords += 1;
-	sawpads_hid = sawpads_send(0x00, true);
-	if (sawpads_hid == 0xFF) {
+	c->hid = sawpads_send(0x00, true);
+	if (c->hid == 0xFF) {
 		// no controller connected
 		return 0;
 	}
@@ -123,7 +121,7 @@ int32_t sawpads_read_card_sector(uint16_t address, uint8_t *buffer)
 	while ((--attempts) >= 0) {
 		uint16_t conf_addr;
 
-		sawpads_start_read();
+		sawpads_start_read(0);
 		sawpads_send(0x81, true);
 		flag = sawpads_send(0x52, true);
 		id = sawpads_send(0x00, true) << 8;
@@ -185,7 +183,7 @@ int32_t sawpads_write_card_sector(uint16_t address, uint8_t *buffer)
 	while ((--attempts) >= 0) {
 		uint16_t conf_addr;
 
-		sawpads_start_read();
+		sawpads_start_read(0);
 		sawpads_send(0x81, true);
 		flag = sawpads_send(0x57, true);
 		id = sawpads_send(0x00, true) << 8;
@@ -228,54 +226,60 @@ int32_t sawpads_write_card_sector(uint16_t address, uint8_t *buffer)
 	return 0;
 }
 
-void sawpads_do_read(void)
+void sawpads_do_read_controller(uint8_t port)
 {
+	volatile sawpads_controller_t *c = &sawpads_controller[port];
 	uint8_t rumble_buf[2];
-	uint8_t sawpads_analogs = 0;
-	rumble_buf[0] = sawpads_rumble[0];
-	rumble_buf[1] = sawpads_rumble[1];
-	uint8_t sawpads_words = sawpads_read_words(0x42, rumble_buf, 2);
+	rumble_buf[0] = c->rumble[0];
+	rumble_buf[1] = c->rumble[1];
+	uint8_t sawpads_words = sawpads_read_words(0x42, port, rumble_buf, 2);
 
 	if(sawpads_words >= 1) {
-		sawpads_buttons = sawpads_buffer[0];
+		c->buttons = sawpads_buffer[0];
 		if (sawpads_words >= 2) {
-			sawpads_analogs = 2;
-			sawpads_axes[0] = sawpads_buffer[1] & 0xFF;
-			sawpads_axes[1] = sawpads_buffer[1] >> 8;
+			c->analogs = 2;
+			c->axes[0] = sawpads_buffer[1] & 0xFF;
+			c->axes[1] = sawpads_buffer[1] >> 8;
 			if (sawpads_words >= 3) {
-				sawpads_analogs = 4;
-				sawpads_axes[2] = sawpads_buffer[2] & 0xFF;
-				sawpads_axes[3] = sawpads_buffer[2] >> 8;
+				c->analogs = 4;
+				c->axes[2] = sawpads_buffer[2] & 0xFF;
+				c->axes[3] = sawpads_buffer[2] >> 8;
 			}
 		}
 	} else {
-		sawpads_buttons = 0xFFFF;
+		c->buttons = 0xFFFF;
 	}
 
-	for (int i = 0; i < sawpads_analogs; i++) {
-		if (sawpads_axes[i] > 0x60 && sawpads_axes[i] < 0xA0)
-			sawpads_axes[i] = 0x00;
+	for (int i = 0; i < c->analogs; i++) {
+		if (c->axes[i] > 0x60 && c->axes[i] < 0xA0)
+			c->axes[i] = 0x00;
 		else
-			sawpads_axes[i] ^= 0x80;
+			c->axes[i] ^= 0x80;
 	}
-	for (int i = sawpads_analogs; i < 4; i++) {
-		sawpads_axes[i] = 0x00;
+	for (int i = c->analogs; i < 4; i++) {
+		c->axes[i] = 0x00;
 	}
 }
 
-void sawpads_unlock_dualshock(void)
+void sawpads_do_read(void)
+{
+	sawpads_do_read_controller(0);
+	sawpads_do_read_controller(1);
+}
+
+void sawpads_unlock_dualshock(uint8_t port)
 {
 	static uint8_t response[6];
 
 	// Kick joypad into config mode
 	response[0] = 0x01;
 	response[1] = 0x00;
-	sawpads_read_words(0x43, response, 2);
+	sawpads_read_words(0x43, port, response, 2);
 
 	// Turn on analog mode
 	response[0] = 0x01;
 	response[1] = 0x03;
-	sawpads_read_words(0x44, response, 2);
+	sawpads_read_words(0x44, port, response, 2);
 
 	// Enable rumble
 	response[0] = 0x00;
@@ -284,7 +288,7 @@ void sawpads_unlock_dualshock(void)
 	response[3] = 0xFF;
 	response[4] = 0xFF;
 	response[5] = 0xFF;
-	sawpads_read_words(0x4D, response, 6);
+	sawpads_read_words(0x4D, port, response, 6);
 
 	// Enable pressure
 	response[0] = 0xFF;
@@ -293,7 +297,7 @@ void sawpads_unlock_dualshock(void)
 	response[3] = 0x00;
 	response[4] = 0x00;
 	response[5] = 0x00;
-	sawpads_read_words(0x4F, response, 6);
+	sawpads_read_words(0x4F, port, response, 6);
 
 	// Revert to normal mode
 	response[0] = 0x00;
@@ -302,7 +306,7 @@ void sawpads_unlock_dualshock(void)
 	response[3] = 0x5A;
 	response[4] = 0x5A;
 	response[5] = 0x5A;
-	sawpads_read_words(0x43, response, 6);
+	sawpads_read_words(0x43, port, response, 6);
 }
 
 void sawpads_isr_vblank(void)

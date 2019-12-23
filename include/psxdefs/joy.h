@@ -15,3 +15,5 @@
 #define PAD_X 0x4000
 #define PAD_S 0x8000
 
+#define PAD_MOUSE_L 0x0800
+#define PAD_MOUSE_R 0x0400

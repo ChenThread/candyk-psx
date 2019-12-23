@@ -1,11 +1,19 @@
 /*
 sawpads: Actually Tested* Joypad Code
-Copyright (C) Chen Thread, 2017, licensed under Creative Commons Zero:
+Copyright (C) Chen Thread, 2017, 2019, licensed under Creative Commons Zero:
 https://creativecommons.org/publicdomain/zero/1.0/
 
 Code by asie and GreaseMonkey,
 the former of whom actually made this code work properly
 */
+
+typedef struct sawpads_controller {
+	uint8_t id, hid;
+	uint16_t buttons;
+	uint16_t analogs;
+	uint8_t axes[4];
+	uint8_t rumble[2];
+} sawpads_controller_t;
 
 int32_t sawpads_read_card_sector(uint16_t address, uint8_t *buffer);
 int32_t sawpads_write_card_sector(uint16_t address, uint8_t *buffer);
@@ -13,13 +21,8 @@ int32_t sawpads_write_card_sector(uint16_t address, uint8_t *buffer);
 void sawpads_isr_joy(void);
 void sawpads_isr_vblank(void);
 
+void sawpads_do_read_controller(uint8_t port);
 void sawpads_do_read(void);
-void sawpads_unlock_dualshock(void);
+void sawpads_unlock_dualshock(uint8_t port);
 
-extern volatile uint8_t sawpads_id;
-extern volatile uint8_t sawpads_hid;
-extern volatile uint16_t sawpads_buttons;
-extern volatile uint8_t sawpads_axes[4];
-extern volatile uint32_t sawpads_read_counter;
-extern volatile uint8_t sawpads_rumble[2];
-
+extern volatile sawpads_controller_t sawpads_controller[2];
