@@ -99,6 +99,7 @@ static uint8_t sawpads_read_words(uint8_t cmd, uint8_t port, uint8_t* response, 
 	c->hid = sawpads_send(0x00, true);
 	if (c->hid == 0xFF) {
 		// no controller connected
+		sawpads_stop_read();
 		return 0;
 	}
 	int j = 0;
