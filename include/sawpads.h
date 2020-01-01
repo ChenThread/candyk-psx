@@ -15,8 +15,8 @@ typedef struct sawpads_controller {
 	uint8_t rumble[2];
 } sawpads_controller_t;
 
-int32_t sawpads_read_card_sector(uint16_t address, uint8_t *buffer);
-int32_t sawpads_write_card_sector(uint16_t address, uint8_t *buffer);
+int32_t sawpads_read_card_sector(uint8_t port, uint16_t address, uint8_t *buffer);
+int32_t sawpads_write_card_sector(uint8_t port, uint16_t address, uint8_t *buffer);
 
 void sawpads_isr_joy(void);
 void sawpads_isr_vblank(void);
