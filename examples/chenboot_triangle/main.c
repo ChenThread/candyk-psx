@@ -5,6 +5,7 @@ https://creativecommons.org/publicdomain/zero/1.0/
 
 ... yeah, this is way easier than the PS2.
 */
+
 #include <assert.h>
 #include <string.h>
 #include <stdlib.h>

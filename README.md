@@ -4,15 +4,13 @@ This readme will need to be better fleshed-out.
 
 By the way, you will need a MIPS cross-compiler. This toolchain assumes that you use `mipsel-none-elf` as your target name, but if you don't use this you can always change the `CROSSPREFIX` variable.
 
-## Licences
+## Licensing
 
-To be decided.
+CandyK, as a whole, is licensed under the "zlib license". Please check the LICENSE file for more information.
 
 ### Exceptions
 
-The `dat/isolicence.*` files are required in order to make a bootable PlayStation disc, and cannot be replaced.
-
-`iso2raw` is of unknown copyright status.
+Toolchain examples are licensed under the Creative Commons Zero license - feel absolutely free to base your code on them!
 
 ## Quick notes for building a GCC toolchain
 
