@@ -1,6 +1,7 @@
-CROSSPREFIX = mipsel-none-elf-
+CROSSPREFIX = mipsel-elf-
 RM = rm
 RM_F = $(RM) -f
+NATIVE_AR = $(AR)
 NATIVE_CC = $(CC)
 NATIVE_CFLAGS = -O2 -g
 NATIVE_LDFLAGS = -O2 -g
@@ -12,6 +13,7 @@ TARGET_CFLAGS = -flto -O2 -g -msoft-float -mips1 -Iinclude
 TARGET_LDFLAGS = -flto -O2 -g -msoft-float -mips1
 
 EXEPOST=
+LIBPOST=.a
 OUTPUT_BINDIR = bin/
 OUTPUT_LIBDIR = lib/
 
@@ -25,6 +27,7 @@ all: tools libs
 clean: clean_tools clean_libs
 
 clean_tools:
+	$(RM_F) $(OUTPUT_TOOL_LIBS) $(OUTPUT_TOOL_LIBS_OBJS) || true
 	$(RM_F) $(OUTPUT_TOOLS) $(OUTPUT_TOOLS_OBJS) || true
 
 clean_libs:
@@ -32,7 +35,7 @@ clean_libs:
 
 libs: $(OUTPUT_LIBS)
 
-tools: $(OUTPUT_TOOLS)
+tools: $(OUTPUT_TOOL_LIBS) $(OUTPUT_TOOLS)
 
 .DUMMY: fake_all all tools libs
 

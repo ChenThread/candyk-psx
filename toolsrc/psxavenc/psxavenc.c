@@ -1,6 +1,6 @@
 /*
-psxavenc: MDEC video + SPU/XA-ADPCM audio encoder
-Copyright (c) 2019 Adrian "asie" Siekierka
+psxavenc: MDEC video + SPU/XA-ADPCM audio encoder frontend
+Copyright (c) 2019, 2020 Adrian "asie" Siekierka
 Copyright (c) 2019 Ben "GreaseMonkey" Russell
 */
 
@@ -79,7 +79,7 @@ int parse_args(settings_t* settings, int argc, char** argv) {
 	}
 
 	if (settings->format == FORMAT_XA || settings->format == FORMAT_XACD) {
-		if (settings->frequency != FREQ_SINGLE && settings->frequency != FREQ_DOUBLE) {
+		if (settings->frequency != PSX_AUDIO_XA_FREQ_SINGLE && settings->frequency != PSX_AUDIO_XA_FREQ_DOUBLE) {
 			fprintf(stderr, "Invalid frequency: %d Hz\n", settings->frequency);
 			return -1;
 		}
@@ -102,7 +102,7 @@ int main(int argc, char **argv) {
 	settings.file_number = 0;
 	settings.channel_number = 0;
 	settings.stereo = true;
-	settings.frequency = FREQ_DOUBLE;
+	settings.frequency = PSX_AUDIO_XA_FREQ_DOUBLE;
 	settings.bits_per_sample = 4;
 
 	settings.video_width = 320;
@@ -147,15 +147,17 @@ int main(int argc, char **argv) {
 		return 1;
 	}
 
+	int av_sample_mul = settings.stereo ? 2 : 1;
+
 	switch (settings.format) {
 		case FORMAT_XA:
 		case FORMAT_XACD:
 			pull_all_av_data(&settings);
-			encode_file_xa(settings.audio_samples, settings.audio_sample_count, &settings, output);
+			encode_file_xa(settings.audio_samples, settings.audio_sample_count / av_sample_mul, &settings, output);
 			break;
 		case FORMAT_SPU:
 			pull_all_av_data(&settings);
-			encode_file_spu(settings.audio_samples, settings.audio_sample_count, &settings, output);
+			encode_file_spu(settings.audio_samples, settings.audio_sample_count / av_sample_mul, &settings, output);
 			break;
 		case FORMAT_STR2:
 			encode_file_str(&settings, output);

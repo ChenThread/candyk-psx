@@ -1,3 +1,8 @@
+OUTPUT_TOOL_LIBS =
+OUTPUT_TOOL_LIBS_OBJS =
+
+include toolsrc/libpsxav/targets.make
+
 OUTPUT_TOOLS =
 OUTPUT_TOOLS_OBJS =
 

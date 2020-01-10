@@ -1,103 +1,80 @@
 /*
-psxavenc: MDEC video + SPU/XA-ADPCM audio encoder
-Copyright (c) 2019 Adrian "asie" Siekierka
+psxavenc: MDEC video + SPU/XA-ADPCM audio encoder frontend
+Copyright (c) 2019, 2020 Adrian "asie" Siekierka
 Copyright (c) 2019 Ben "GreaseMonkey" Russell
 */
 
 #include "common.h"
+#include "libpsxav.h"
+
+static psx_audio_xa_settings_t settings_to_libpsxav_xa_audio(settings_t *settings) {
+	psx_audio_xa_settings_t new_settings;
+	new_settings.bits_per_sample = settings->bits_per_sample;
+	new_settings.frequency = settings->frequency;
+	new_settings.stereo = settings->stereo;
+	new_settings.file_number = settings->file_number;
+	new_settings.channel_number = settings->channel_number;
+
+	switch (settings->format) {
+		case FORMAT_XA:
+			new_settings.format = PSX_AUDIO_XA_FORMAT_XA;
+			break;
+		default:
+			new_settings.format = PSX_AUDIO_XA_FORMAT_XACD;
+			break;
+	}
+
+	return new_settings;
+};
 
 void encode_file_spu(int16_t *audio_samples, int audio_sample_count, settings_t *settings, FILE *output) {
-	uint8_t prebuf[28];
+	psx_audio_encoder_state_t audio_state;	
+	int audio_samples_per_block = psx_audio_spu_get_samples_per_block();
 	uint8_t buffer[16];
-	uint8_t *data;
 
-	for (int i = 0; i < audio_sample_count; i += 28) {
-		buffer[0] = encode_nibbles(&(settings->state_left), audio_samples + i, 1, prebuf, 0, 1, SPU_ADPCM_FILTER_COUNT);
-		for (int j = 0; j < 28; j+=2) {
-			buffer[2 + (j>>1)] = (prebuf[j] & 0x0F) | (prebuf[j+1] << 4);
+	memset(&audio_state, 0, sizeof(psx_audio_encoder_state_t));
+
+	for (int i = 0; i < audio_sample_count; i += audio_samples_per_block) {
+		int samples_length = audio_sample_count - i;
+		if (samples_length > audio_samples_per_block) samples_length = audio_samples_per_block;
+		int length = psx_audio_spu_encode(&audio_state, audio_samples + i, samples_length, buffer);
+		if (i == 0) {
+			buffer[1] = PSX_AUDIO_SPU_LOOP_START;
+		} else if ((i + audio_samples_per_block) >= audio_sample_count) {
+			buffer[1] = PSX_AUDIO_SPU_LOOP_END;
 		}
-
-		buffer[1] = 0;
-		buffer[1] |= (i == 0) ? 4 : 0;
-		buffer[1] |= ((i + 28) >= audio_sample_count) ? 1 : 0;
-
-		fwrite(buffer, 16, 1, output);
+		fwrite(buffer, length, 1, output);
 	}
 }
-
-static void encode_block_xa(int16_t *audio_samples, uint8_t *data, settings_t *settings) {
-	if (settings->bits_per_sample == 4) {
-		if (settings->stereo) {
-			data[0]  = encode_nibbles(&(settings->state_left), audio_samples,            2, data + 0x10, 0, 4, XA_ADPCM_FILTER_COUNT);
-			data[1]  = encode_nibbles(&(settings->state_right), audio_samples + 1,        2, data + 0x10, 4, 4, XA_ADPCM_FILTER_COUNT);
-			data[2]  = encode_nibbles(&(settings->state_left), audio_samples + 56,       2, data + 0x11, 0, 4, XA_ADPCM_FILTER_COUNT);
-			data[3]  = encode_nibbles(&(settings->state_right), audio_samples + 56 + 1,   2, data + 0x11, 4, 4, XA_ADPCM_FILTER_COUNT);
-			data[8]  = encode_nibbles(&(settings->state_left), audio_samples + 56*2,     2, data + 0x12, 0, 4, XA_ADPCM_FILTER_COUNT);
-			data[9]  = encode_nibbles(&(settings->state_right), audio_samples + 56*2 + 1, 2, data + 0x12, 4, 4, XA_ADPCM_FILTER_COUNT);
-			data[10] = encode_nibbles(&(settings->state_left), audio_samples + 56*3,     2, data + 0x13, 0, 4, XA_ADPCM_FILTER_COUNT);
-			data[11] = encode_nibbles(&(settings->state_right), audio_samples + 56*3 + 1, 2, data + 0x13, 4, 4, XA_ADPCM_FILTER_COUNT);
-		} else {
-			data[0]  = encode_nibbles(&(settings->state_left), audio_samples,            1, data + 0x10, 0, 4, XA_ADPCM_FILTER_COUNT);
-			data[1]  = encode_nibbles(&(settings->state_right), audio_samples + 28,       1, data + 0x10, 4, 4, XA_ADPCM_FILTER_COUNT);
-			data[2]  = encode_nibbles(&(settings->state_left), audio_samples + 28*2,     1, data + 0x11, 0, 4, XA_ADPCM_FILTER_COUNT);
-			data[3]  = encode_nibbles(&(settings->state_right), audio_samples + 28*3,     1, data + 0x11, 4, 4, XA_ADPCM_FILTER_COUNT);
-			data[8]  = encode_nibbles(&(settings->state_left), audio_samples + 28*4,     1, data + 0x12, 0, 4, XA_ADPCM_FILTER_COUNT);
-			data[9]  = encode_nibbles(&(settings->state_right), audio_samples + 28*5,     1, data + 0x12, 4, 4, XA_ADPCM_FILTER_COUNT);
-			data[10] = encode_nibbles(&(settings->state_left), audio_samples + 28*6,     1, data + 0x13, 0, 4, XA_ADPCM_FILTER_COUNT);
-			data[11] = encode_nibbles(&(settings->state_right), audio_samples + 28*7,     1, data + 0x13, 4, 4, XA_ADPCM_FILTER_COUNT);
-		}
-	} else {
-/*		if (settings->stereo) {
-			data[0]  = encode_bytes(audio_samples,            2, data + 0x10);
-			data[1]  = encode_bytes(audio_samples + 1,        2, data + 0x11);
-			data[2]  = encode_bytes(audio_samples + 56,       2, data + 0x12);
-			data[3]  = encode_bytes(audio_samples + 57,       2, data + 0x13);
-		} else {
-			data[0]  = encode_bytes(audio_samples,            1, data + 0x10);
-			data[1]  = encode_bytes(audio_samples + 28,       1, data + 0x11);
-			data[2]  = encode_bytes(audio_samples + 56,       1, data + 0x12);
-			data[3]  = encode_bytes(audio_samples + 84,       1, data + 0x13);
-		} */
-	}
-}
-
-#define WRITE_BUFFER() \
-	if (settings->format == FORMAT_XA) { \
-		fwrite(buffer + 0x010, 2336, 1, output); \
-	} else { \
-		fwrite(buffer, 2352, 1, output); \
-	}
 
 void encode_file_xa(int16_t *audio_samples, int audio_sample_count, settings_t *settings, FILE *output) {
+	psx_audio_xa_settings_t xa_settings = settings_to_libpsxav_xa_audio(settings);
+	psx_audio_encoder_state_t audio_state;	
+	int audio_samples_per_sector = psx_audio_xa_get_samples_per_sector(xa_settings);
+	int av_sample_mul = settings->stereo ? 2 : 1;
 	uint8_t buffer[2352];
-	int sample_jump = (settings->bits_per_sample == 8) ? 112 : 224;
 
-	init_sector_buffer(buffer, settings, false);
+	memset(&audio_state, 0, sizeof(psx_audio_encoder_state_t));
 
-	for (int i = 0, j = 0; i < audio_sample_count; i += sample_jump, j++) {
-		uint8_t *data = buffer + 0x18 + ((j%18) * 0x80);
-
-		encode_block_xa(audio_samples + i, data, settings);
-
-		memcpy(data + 4, data, 4);
-		memcpy(data + 12, data + 8, 4);
-
-		if ((i + sample_jump) >= audio_sample_count) {
-			// next written buffer is final
-			buffer[0x12] |= 0x80;
-			buffer[0x16] |= 0x80;
+	for (int i = 0; i < audio_sample_count; i += audio_samples_per_sector) {
+		int samples_length = audio_sample_count - i;
+		if (samples_length > audio_samples_per_sector) samples_length = audio_samples_per_sector;
+		int length = psx_audio_xa_encode(xa_settings, &audio_state, audio_samples + (i * av_sample_mul), samples_length, buffer);
+		if ((i + audio_samples_per_sector) >= audio_sample_count) {
+			psx_audio_xa_encode_finalize(xa_settings, buffer, length);
 		}
-
-		if ((j+1)%18 == 0 || i + sample_jump >= audio_sample_count) {
-			calculate_edc_xa(buffer);
-			WRITE_BUFFER();
-		}
+		fwrite(buffer, length, 1, output);
 	}
 }
 
 void encode_file_str(settings_t *settings, FILE *output) {
 	uint8_t buffer[2352*8];
-	int sample_jump = (settings->bits_per_sample == 8) ? 112 : 224;
+	psx_audio_xa_settings_t xa_settings = settings_to_libpsxav_xa_audio(settings);
+	psx_audio_encoder_state_t audio_state;	
+	int audio_samples_per_sector = psx_audio_xa_get_samples_per_sector(xa_settings);
+	int av_sample_mul = settings->stereo ? 2 : 1;
+
+	memset(&audio_state, 0, sizeof(psx_audio_encoder_state_t));
 
 	settings->state_vid.frame_index = 0;
 	settings->state_vid.bits_value = 0;
@@ -114,52 +91,29 @@ void encode_file_str(settings_t *settings, FILE *output) {
 	settings->state_vid.frame_block_overflow_den = 8*settings->video_fps_num;
 	//fprintf(stderr, "%f\n", ((double)settings->state_vid.frame_block_base_overflow)/((double)settings->state_vid.frame_block_overflow_den)); abort();
 
-	init_sector_buffer(buffer + 2352*7, settings, false);
-	//for (int i = 0, j = 0; i < audio_sample_count; i += sample_jump, j++) {
-
 	// FIXME: this needs an extra frame to prevent A/V desync
 	const int frames_needed = 2;
-	for (int j = 0; ensure_av_data(settings, sample_jump*18*frames_needed, 1*frames_needed); j++) {
-
-		uint8_t *data = buffer + 2352*7 + 0x18 + ((j%18) * 0x80);
-
-		//encode_block_xa(audio_samples + i, data, settings);
-		encode_block_xa(settings->audio_samples + (j%18)*sample_jump, data, settings);
-
-		memcpy(data + 4, data, 4);
-		memcpy(data + 12, data + 8, 4);
-
+	for (int j = 0; ensure_av_data(settings, audio_samples_per_sector*av_sample_mul*frames_needed, 1*frames_needed); j+=18) {
+		psx_audio_xa_encode(xa_settings, &audio_state, settings->audio_samples, audio_samples_per_sector, buffer + 2352 * 7);
+		
 		// TODO: the final buffer
-#if 0
-		if ((i + sample_jump) >= settings->audio_sample_count) {
-			// next written buffer is final
-			buffer[2352*7 + 0x12] |= 0x80;
-			buffer[2352*7 + 0x16] |= 0x80;
+		for(int k = 0; k < 7; k++) {
+			init_sector_buffer_video(buffer + 2352*k, settings);
 		}
-#endif
+		encode_block_str(settings->video_frames, settings->video_frame_count, buffer, settings);
+		for(int k = 0; k < 8; k++) {
+			int t = k + (j/18)*8 + 75*2;
 
-		//if ((j+1)%18 == 0 || i + sample_jump >= settings->audio_sample_count) {
-		if ((j+1)%18 == 0) {
-			for(int k = 0; k < 7; k++) {
-				init_sector_buffer(buffer + 2352*k, settings, true);
+			// Put the time in
+			buffer[0x00C + 2352*k] = ((t/75/60)%10)|(((t/75/60)/10)<<4);
+			buffer[0x00D + 2352*k] = (((t/75)%60)%10)|((((t/75)%60)/10)<<4);
+			buffer[0x00E + 2352*k] = ((t%75)%10)|(((t%75)/10)<<4);
+
+			if(k != 7) {
+				calculate_edc_data(buffer + 2352*k);
 			}
-			encode_block_str(settings->video_frames, settings->video_frame_count, buffer, settings);
-			for(int k = 0; k < 8; k++) {
-				int t = k + (j/18)*8 + 75*2;
-
-				// Put the time in
-				buffer[0x00C + 2352*k] = ((t/75/60)%10)|(((t/75/60)/10)<<4);
-				buffer[0x00D + 2352*k] = (((t/75)%60)%10)|((((t/75)%60)/10)<<4);
-				buffer[0x00E + 2352*k] = ((t%75)%10)|(((t%75)/10)<<4);
-
-				if(k != 7) {
-					calculate_edc_data(buffer + 2352*k);
-				}
-			}
-			calculate_edc_xa(buffer + 2352*7);
-			retire_av_data(settings, sample_jump*18, 0);
-			fwrite(buffer, 2352*8, 1, output);
-			init_sector_buffer(buffer + 2352*7, settings, false);
 		}
+		retire_av_data(settings, audio_samples_per_sector*av_sample_mul, 0);
+		fwrite(buffer, 2352*8, 1, output);
 	}
 }

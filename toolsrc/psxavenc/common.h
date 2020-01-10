@@ -1,6 +1,6 @@
 /*
-psxavenc: MDEC video + SPU/XA-ADPCM audio encoder
-Copyright (c) 2019 Adrian "asie" Siekierka
+psxavenc: MDEC video + SPU/XA-ADPCM audio encoder frontend
+Copyright (c) 2019, 2020 Adrian "asie" Siekierka
 Copyright (c) 2019 Ben "GreaseMonkey" Russell
 */
 
@@ -17,23 +17,12 @@ Copyright (c) 2019 Ben "GreaseMonkey" Russell
 #include <libavformat/avformat.h>
 #include <libswscale/swscale.h>
 #include <libswresample/swresample.h>
+#include <libpsxav.h>
 
-#define FREQ_SINGLE 18900
-#define FREQ_DOUBLE 37800
 #define FORMAT_XA 0
 #define FORMAT_XACD 1
 #define FORMAT_SPU 2
 #define FORMAT_STR2 3
-
-#define ADPCM_FILTER_COUNT 5
-#define XA_ADPCM_FILTER_COUNT 4
-#define SPU_ADPCM_FILTER_COUNT 5
-
-typedef struct {
-	int qerr; // quanitisation error
-	uint64_t mse; // mean square error
-	int prev1, prev2;
-} aud_encoder_state_t;
 
 #define MAX_UNMUXED_BLOCKS 9
 typedef struct {
@@ -94,17 +83,11 @@ typedef struct {
 
 	av_decoder_state_t decoder_state_av;
 
-	aud_encoder_state_t state_left;
-	aud_encoder_state_t state_right;
 	vid_encoder_state_t state_vid;
 } settings_t;
 
-// adpcm.c
-uint8_t encode_nibbles(aud_encoder_state_t *state, int16_t *samples, int pitch, uint8_t *data, int data_shift, int data_pitch, int filter_count);
-
 // cdrom.c
-void init_sector_buffer(uint8_t *buffer, settings_t *settings, bool is_video);
-void calculate_edc_xa(uint8_t *buffer);
+void init_sector_buffer_video(uint8_t *buffer, settings_t *settings);
 void calculate_edc_data(uint8_t *buffer);
 
 // decoding.c
