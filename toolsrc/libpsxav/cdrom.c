@@ -21,6 +21,7 @@ freely, subject to the following restrictions:
 3. This notice may not be removed or altered from any source distribution.
 */
 
+#include <string.h>
 #include "libpsxav.h"
 
 static uint32_t psx_cdrom_calculate_edc(uint8_t *sector, uint32_t offset, uint32_t size)
@@ -38,6 +39,16 @@ static uint32_t psx_cdrom_calculate_edc(uint8_t *sector, uint32_t offset, uint32
 void psx_cdrom_calculate_checksums(uint8_t *sector, psx_cdrom_sector_type_t type)
 {
 	switch (type) {
+		case PSX_CDROM_SECTOR_TYPE_MODE1: {
+			uint32_t edc = psx_cdrom_calculate_edc(sector, 0x0, 0x810);
+			sector[0x810] = (uint8_t)(edc);
+			sector[0x811] = (uint8_t)(edc >> 8);
+			sector[0x812] = (uint8_t)(edc >> 16);
+			sector[0x813] = (uint8_t)(edc >> 24);
+
+			memset(sector + 0x814, 0, 8);
+			// TODO: ECC
+		} break;
 		case PSX_CDROM_SECTOR_TYPE_MODE2_FORM1: {
 			uint32_t edc = psx_cdrom_calculate_edc(sector, 0x10, 0x808);
 			sector[0x818] = (uint8_t)(edc);

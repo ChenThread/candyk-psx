@@ -21,6 +21,7 @@ freely, subject to the following restrictions:
 3. This notice may not be removed or altered from any source distribution.
 */
 
+#include <assert.h>
 #include <string.h>
 #include "libpsxav.h"
 
@@ -220,6 +221,7 @@ uint32_t psx_audio_spu_get_samples_per_block(void) {
 static void psx_audio_xa_encode_init_sector(uint8_t *buffer, psx_audio_xa_settings_t settings) {
 	if (settings.format == PSX_AUDIO_XA_FORMAT_XACD) {
 		memset(buffer, 0, 2352);
+		memset(buffer+0x001, 0xFF, 10);
 		buffer[0x00F] = 0x02;
 	} else {
 		memset(buffer + 0x10, 0, 2336);

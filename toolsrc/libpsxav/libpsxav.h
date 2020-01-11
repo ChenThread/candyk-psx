@@ -76,7 +76,10 @@ void psx_audio_spu_set_flag_at_sample(uint8_t* spu_data, int sample_pos, int fla
 
 // cdrom.c
 
+#define PSX_CDROM_SECTOR_SIZE 2352
+
 typedef enum {
+	PSX_CDROM_SECTOR_TYPE_MODE1,
 	PSX_CDROM_SECTOR_TYPE_MODE2_FORM1,
 	PSX_CDROM_SECTOR_TYPE_MODE2_FORM2
 } psx_cdrom_sector_type_t;
