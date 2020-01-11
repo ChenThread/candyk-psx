@@ -1,8 +1,6 @@
-CandyK: A candy shop of tools and libraries for PlayStation development
+CandyK-PSX: A candy shop of tools and libraries for PlayStation development
 
 This readme will need to be better fleshed-out.
-
-By the way, you will need a MIPS cross-compiler. This toolchain assumes that you use `mipsel-none-elf` as your target name, but if you don't use this you can always change the `CROSSPREFIX` variable.
 
 ## Licensing
 
@@ -12,16 +10,25 @@ CandyK, as a whole, is licensed under the "zlib license". Please check the LICEN
 
 Toolchain examples are licensed under the Creative Commons Zero license - feel absolutely free to base your code on them!
 
-## Quick notes for building a GCC toolchain
+## Installation
 
-TODO: actually go into depth into how this is done and provide scripts so people don't have to think.
+### Binary
 
-* binutils: configure, make, sudo make install
-* gcc: configure, make all-gcc, sudo make install-gcc
-* newlib: configure, make, sudo make install
-* back to gcc: make; sudo make install
+1. Install or compile pacman (the Arch Linux package manager).
+2. Append the following to /etc/pacman.conf:
 
-If you want C++ support, you will have to comment out the line in a libstdc++ configure script which says that the target is not supported. It builds fine. It probably works.
+```
+[candyk]
+Server = http://candyk.asie.pl/repo/x86_64
+downloads.devkitpro.org/packages
+```
+
+3. `pacman -Syu`
+4. `pacman -S candyk-psx`
+
+### Source
+
+TODO
 
 ## Architecture
 
