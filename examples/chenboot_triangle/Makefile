@@ -6,7 +6,7 @@ SRCS = \
 LIBS = -nostdlib -L../../lib -lgcc -lc -lchenboot
 INCLUDES = -I../../include
 
-CROSSPREFIX = mipsel-none-elf-
+CROSSPREFIX = mipsel-elf-
 TARGET_CC = $(CROSSPREFIX)gcc
 TARGET_CFLAGS = -g -flto -O2 -msoft-float -mips1 $(INCLUDES)
 TARGET_LDFLAGS = -g -flto -O2 -msoft-float -mips1 -Wl,-Ttext-segment=0x80010000 $(LIBS)
