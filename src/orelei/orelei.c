@@ -29,10 +29,7 @@ freely, subject to the following restrictions:
 #include <stdio.h>
 #include <errno.h>
 
-#include <psxdefs/intc.h>
-#include <psxdefs/spu.h>
-#include <psxregs.h>
-
+#include <psxdefs.h>
 #include <orelei.h>
 
 // Required due to SPU writes being a bit unstable
@@ -43,7 +40,7 @@ static const unsigned int notetab[12] = {
 	0xB505, 0xBFC9, 0xCB30, 0xD745, 0xE412, 0xF1A2,
 };
 
-static uint16_t spu_cnt_shadow;
+static uint16_t spu_ctrl_shadow;
 
 static uint32_t spu_new_key_off = 0x000000;
 static uint32_t spu_new_key_on = 0x000000;
@@ -67,11 +64,11 @@ void orelei_commit_key_changes(void)
 
 void orelei_play_note(int ch, int sram_addr, int adsr, int voll, int volr, int pitch)
 {
-	int ssah = (sram_addr >> 4) << 1;
+	int addr = (sram_addr >> 4) << 1;
 	int volboth = (voll & 0xFFFF) | (volr<<16);
 	TWICE(PSXREG_SPU_n_VOL(ch) = volboth);
 	TWICE(PSXREG_SPU_n_PITCH(ch) = pitch);
-	TWICE(PSXREG_SPU_n_SSAH(ch) = ssah);
+	TWICE(PSXREG_SPU_n_ADDR(ch) = addr);
 	TWICE(PSXREG_SPU_n_ADSR(ch) = adsr);
 	spu_new_key_on |= (0x1<<ch);
 }
@@ -83,10 +80,10 @@ void orelei_stop_note(int ch)
 
 void orelei_set_transfer_mode(int mode)
 {
-	spu_cnt_shadow &= ~SPU_CNT_TRANSFER_MODE_MASK;
-	spu_cnt_shadow |= SPU_CNT_TRANSFER_MODE(mode);
-	TWICE(PSXREG_SPU_CNT = spu_cnt_shadow);
-	while((PSXREG_SPU_STAT & 0x3F) != (spu_cnt_shadow & 0x3F)) {
+	spu_ctrl_shadow &= ~SPU_CTRL_TRANSFER_MODE_MASK;
+	spu_ctrl_shadow |= SPU_CTRL_TRANSFER_MODE(mode);
+	TWICE(PSXREG_SPU_CTRL = spu_ctrl_shadow);
+	while((PSXREG_SPU_STAT & 0x3F) != (spu_ctrl_shadow & 0x3F)) {
 	}
 }
 
@@ -95,9 +92,9 @@ void orelei_sram_write_blocking(int sram_addr, void const* data, size_t len)
 	sram_addr >>= 4;
 	len >>= 4;
 
-	TWICE(PSXREG_SPU_TRNCTL = 0x0004);
+	TWICE(PSXREG_SPU_MEM_CTRL = 0x0004);
 	orelei_set_transfer_mode(SPU_TRANSFER_MODE_STOP);
-	TWICE(PSXREG_SPU_TSA = (sram_addr<<1));
+	TWICE(PSXREG_SPU_MEM_ADDR = (sram_addr<<1));
 	orelei_set_transfer_mode(SPU_TRANSFER_MODE_DMA_WRITE);
 
 	PSXREG_Dn_CHCR(4) = 0x00000201;
@@ -170,19 +167,19 @@ void orelei_pack_spu(uint8_t *outbuf, const int16_t *inbuf, int16_t *pred1, int1
 void orelei_open_cd_audio(int voll, int volr)
 {
 	int volboth = (voll & 0xFFFF) | (volr<<16);
-	TWICE(PSXREG_SPU_CDVOL = volboth);
-	spu_cnt_shadow |= 1;
-	TWICE(PSXREG_SPU_CNT = spu_cnt_shadow);
-	while((PSXREG_SPU_STAT & 0x3F) != (spu_cnt_shadow & 0x3F)) {
+	TWICE(PSXREG_SPU_CD_VOL = volboth);
+	spu_ctrl_shadow |= 1;
+	TWICE(PSXREG_SPU_CTRL = spu_ctrl_shadow);
+	while((PSXREG_SPU_STAT & 0x3F) != (spu_ctrl_shadow & 0x3F)) {
 	}
 }
 
 void orelei_close_cd_audio()
 {
-	TWICE(PSXREG_SPU_CDVOL = 0);
-	spu_cnt_shadow &= ~1;
-	TWICE(PSXREG_SPU_CNT = spu_cnt_shadow);
-	while((PSXREG_SPU_STAT & 0x3F) != (spu_cnt_shadow & 0x3F)) {
+	TWICE(PSXREG_SPU_CD_VOL = 0);
+	spu_ctrl_shadow &= ~1;
+	TWICE(PSXREG_SPU_CTRL = spu_ctrl_shadow);
+	while((PSXREG_SPU_STAT & 0x3F) != (spu_ctrl_shadow & 0x3F)) {
 	}
 }
 
@@ -191,29 +188,29 @@ void orelei_init_spu(void)
 	for(int i = 0; i < SPU_CHANNEL_COUNT; i++) {
 		TWICE(PSXREG_SPU_n_VOL(i) = 0x00000000);
 		TWICE(PSXREG_SPU_n_PITCH(i) = 0x0000);
-		TWICE(PSXREG_SPU_n_SSAH(i) = 0x0000);
+		TWICE(PSXREG_SPU_n_ADDR(i) = 0x0000);
 		TWICE(PSXREG_SPU_n_ADSR(i) = 0x00000000);
 	}
 
 	TWICE(PSXREG_SPU_MVOL = 0x3FFF3FFF);
-	TWICE(PSXREG_SPU_EVOL = 0x00000000);
+	TWICE(PSXREG_SPU_EXT_VOL = 0x00000000);
 	TWICE(PSXREG_SPU_KOFF = 0x00FFFFFF);
 	TWICE(PSXREG_SPU_PMON = 0x00000000);
 	TWICE(PSXREG_SPU_NON = 0x00000000);
 	TWICE(PSXREG_SPU_EON = 0x00000000);
 
-	TWICE(PSXREG_SPU_ESA = 0xFFFE);
-	TWICE(PSXREG_SPU_IRQA = 0xFFFD);
-	spu_cnt_shadow = (0
-		| SPU_CNT_MASTER_ENABLE
-		| SPU_CNT_MASTER_UNMUTE
-		| SPU_CNT_REVERB_ENABLE
+	TWICE(PSXREG_SPU_EFFECT_mBASE = 0xFFFE);
+	TWICE(PSXREG_SPU_IRQ_ADDR = 0xFFFD);
+	spu_ctrl_shadow = (0
+		| SPU_CTRL_MASTER_ENABLE
+		| SPU_CTRL_MASTER_UNMUTE
+		| SPU_CTRL_REVERB_ENABLE
 		| SPU_CNT_TRANSFER_MODE(SPU_TRANSFER_MODE_STOP)
 	);
-	TWICE(PSXREG_SPU_CNT = spu_cnt_shadow);
-	TWICE(PSXREG_SPU_TRNCTL = 0x0004);
-	TWICE(PSXREG_SPU_CDVOL = 0x00000000);
-	TWICE(PSXREG_SPU_XVOL = 0x00000000);
+	TWICE(PSXREG_SPU_CTRL = spu_ctrl_shadow);
+	TWICE(PSXREG_SPU_MEM_CTRL = 0x0004);
+	TWICE(PSXREG_SPU_CD_VOL = 0x00000000);
+	TWICE(PSXREG_SPU_EXT_VOL = 0x00000000);
 
 	// Disable reverb fully
 	TWICE(PSXREG_SPU_EFFECT_dAPF1 = 0x0000);

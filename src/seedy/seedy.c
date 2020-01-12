@@ -29,9 +29,7 @@ freely, subject to the following restrictions:
 #include <stdio.h>
 #include <errno.h>
 
-#include <psxdefs/intc.h>
-#include <psxdefs/cdrom.h>
-#include <psxregs.h>
+#include <psxdefs.h>
 #include <seedy.h>
 
 //

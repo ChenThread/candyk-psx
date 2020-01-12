@@ -2,7 +2,7 @@
 psxdefs: PS register/constants definitions
 
 Copyright (c) 2017 Ben "GreaseMonkey" Russell
-Copyright (c) 2019 Adrian "asie" Siekierka
+Copyright (c) 2019, 2020 Adrian "asie" Siekierka
 
 This software is provided 'as-is', without any express or implied
 warranty. In no event will the authors be held liable for any damages
@@ -27,12 +27,12 @@ freely, subject to the following restrictions:
 #define PSX_IOBASE 0x1F800000
 #endif
 
-// most names are based on nocash's psx-spx
+// Most of this is named to match psx-spx terms and definitions,
+// with some mild differences for consistency purposes.
 
 //
 // Memory control
 //
-// invented a few names for this one
 #define PSXREG_MEM_EXP1_BASE  (*(volatile uint32_t *)(PSX_IOBASE + 0x1000))
 #define PSXREG_MEM_EXP2_BASE  (*(volatile uint32_t *)(PSX_IOBASE + 0x1004))
 #define PSXREG_MEM_EXP1_CONF  (*(volatile uint32_t *)(PSX_IOBASE + 0x1008))
@@ -48,15 +48,14 @@ freely, subject to the following restrictions:
 //
 // Serial/Joypad/Memcard
 //
-// DATA1 is a 1-byte alias, apparently this can be used?
 #define PSXREG_JOY_DATA  (*(volatile uint32_t *)(PSX_IOBASE + 0x1040))
-#define PSXREG_JOY_DATA1 (*(volatile uint8_t  *)(PSX_IOBASE + 0x1040))
+#define PSXREG_JOY_DATA0 (*(volatile uint8_t  *)(PSX_IOBASE + 0x1040))
 #define PSXREG_JOY_STAT  (*(volatile uint32_t *)(PSX_IOBASE + 0x1044))
 #define PSXREG_JOY_MODE  (*(volatile uint16_t *)(PSX_IOBASE + 0x1048))
 #define PSXREG_JOY_CTRL  (*(volatile uint16_t *)(PSX_IOBASE + 0x104A))
 #define PSXREG_JOY_BAUD  (*(volatile uint16_t *)(PSX_IOBASE + 0x104E))
 #define PSXREG_SIO_DATA  (*(volatile uint32_t *)(PSX_IOBASE + 0x1050))
-#define PSXREG_SIO_DATA1 (*(volatile uint8_t  *)(PSX_IOBASE + 0x1050))
+#define PSXREG_SIO_DATA0 (*(volatile uint8_t  *)(PSX_IOBASE + 0x1050))
 #define PSXREG_SIO_STAT  (*(volatile uint32_t *)(PSX_IOBASE + 0x1054))
 #define PSXREG_SIO_MODE  (*(volatile uint16_t *)(PSX_IOBASE + 0x1058))
 #define PSXREG_SIO_CTRL  (*(volatile uint16_t *)(PSX_IOBASE + 0x105A))
@@ -82,18 +81,13 @@ freely, subject to the following restrictions:
 //
 // Timers
 //
-// these names are from the PS2 EE User's Manual
-// the register purposes match the PS1's
-// only the bottom 16 bits make sense but they're still 32-bit accesses
-#define PSXREG_Tn_COUNT(n) (*(volatile uint32_t *)(PSX_IOBASE + 0x1100 + ((n)*0x10)))
+#define PSXREG_Tn_VALUE(n) (*(volatile uint32_t *)(PSX_IOBASE + 0x1100 + ((n)*0x10)))
 #define PSXREG_Tn_MODE(n)  (*(volatile uint32_t *)(PSX_IOBASE + 0x1104 + ((n)*0x10)))
-#define PSXREG_Tn_COMP(n)  (*(volatile uint32_t *)(PSX_IOBASE + 0x1108 + ((n)*0x10)))
+#define PSXREG_Tn_TARGET(n)  (*(volatile uint32_t *)(PSX_IOBASE + 0x1108 + ((n)*0x10)))
 
 //
 // CD-ROM
 //
-// had to make up names for these as well
-// by the way, check the docs for this - it will make no sense if you don't
 #define PSXREG_CDROM_In_IDXSR  (*(volatile uint8_t *)(PSX_IOBASE + 0x1800))
 #define PSXREG_CDROM_I0_CMD    (*(volatile uint8_t *)(PSX_IOBASE + 0x1801))
 #define PSXREG_CDROM_I0_PARAMS (*(volatile uint8_t *)(PSX_IOBASE + 0x1802))
@@ -123,32 +117,28 @@ freely, subject to the following restrictions:
 //
 #define PSXREG_MDEC_MDEC0 (*(volatile uint32_t *)(PSX_IOBASE + 0x1820))
 #define PSXREG_MDEC_MDEC1 (*(volatile uint32_t *)(PSX_IOBASE + 0x1824))
+#define PSXREG_MDEC_CMD  PSXREG_MDEC_MDEC0
+#define PSXREG_MDEC_DATA PSXREG_MDEC_MDEC0
+#define PSXREG_MDEC_CTRL PSXREG_MDEC_MDEC1
+#define PSXREG_MDEC_STAT PSXREG_MDEC_MDEC1
 
 //
 // SPU
 //
-// many of these names are from the PS2 SPU2 Overview Manual
-// there are some 16-bit aliases
-//
-// CDVOL and XVOL are called AVOL and BVOL
-// but I don't know which way around they go
 #define PSXREG_SPU_n_VOL(n)   (*(volatile uint32_t *)(PSX_IOBASE + 0x1C00 + (n)*0x10))
 #define PSXREG_SPU_n_VOLL(n)  (*(volatile uint16_t *)(PSX_IOBASE + 0x1C00 + (n)*0x10))
 #define PSXREG_SPU_n_VOLR(n)  (*(volatile uint16_t *)(PSX_IOBASE + 0x1C02 + (n)*0x10))
 #define PSXREG_SPU_n_PITCH(n) (*(volatile uint16_t *)(PSX_IOBASE + 0x1C04 + (n)*0x10))
-#define PSXREG_SPU_n_SSAH(n)  (*(volatile uint16_t *)(PSX_IOBASE + 0x1C06 + (n)*0x10))
+#define PSXREG_SPU_n_ADDR(n)  (*(volatile uint16_t *)(PSX_IOBASE + 0x1C06 + (n)*0x10))
 #define PSXREG_SPU_n_ADSR(n)  (*(volatile uint32_t *)(PSX_IOBASE + 0x1C08 + (n)*0x10))
-#define PSXREG_SPU_n_ADSR1(n) (*(volatile uint16_t *)(PSX_IOBASE + 0x1C08 + (n)*0x10))
-#define PSXREG_SPU_n_ADSR2(n) (*(volatile uint16_t *)(PSX_IOBASE + 0x1C0A + (n)*0x10))
-#define PSXREG_SPU_n_ENVX(n)  (*(volatile uint16_t *)(PSX_IOBASE + 0x1C0C + (n)*0x10))
-#define PSXREG_SPU_n_LSAX(n)  (*(volatile uint16_t *)(PSX_IOBASE + 0x1C0E + (n)*0x10))
+#define PSXREG_SPU_n_ADSR0(n) (*(volatile uint16_t *)(PSX_IOBASE + 0x1C08 + (n)*0x10))
+#define PSXREG_SPU_n_ADSR1(n) (*(volatile uint16_t *)(PSX_IOBASE + 0x1C0A + (n)*0x10))
+#define PSXREG_SPU_n_ADSR_CURR_VOL(n)  (*(volatile uint16_t *)(PSX_IOBASE + 0x1C0C + (n)*0x10))
+#define PSXREG_SPU_n_LOOP_ADDR(n)  (*(volatile uint16_t *)(PSX_IOBASE + 0x1C0E + (n)*0x10))
 
 #define PSXREG_SPU_MVOL   (*(volatile uint32_t *)(PSX_IOBASE + 0x1D80))
 #define PSXREG_SPU_MVOLL  (*(volatile uint16_t *)(PSX_IOBASE + 0x1D80))
 #define PSXREG_SPU_MVOLR  (*(volatile uint16_t *)(PSX_IOBASE + 0x1D82))
-#define PSXREG_SPU_EVOL   (*(volatile uint32_t *)(PSX_IOBASE + 0x1D84))
-#define PSXREG_SPU_EVOLL  (*(volatile uint16_t *)(PSX_IOBASE + 0x1D84))
-#define PSXREG_SPU_EVOLR  (*(volatile uint16_t *)(PSX_IOBASE + 0x1D86))
 #define PSXREG_SPU_KON    (*(volatile uint32_t *)(PSX_IOBASE + 0x1D88))
 #define PSXREG_SPU_KON0   (*(volatile uint16_t *)(PSX_IOBASE + 0x1D88))
 #define PSXREG_SPU_KON1   (*(volatile uint16_t *)(PSX_IOBASE + 0x1D8A))
@@ -168,26 +158,29 @@ freely, subject to the following restrictions:
 #define PSXREG_SPU_ENDX0  (*(volatile uint16_t *)(PSX_IOBASE + 0x1D9C))
 #define PSXREG_SPU_ENDX1  (*(volatile uint16_t *)(PSX_IOBASE + 0x1D9E))
 // 0x1DA0 16-bit unknown
-#define PSXREG_SPU_ESA    (*(volatile uint16_t *)(PSX_IOBASE + 0x1DA2))
-#define PSXREG_SPU_IRQA   (*(volatile uint16_t *)(PSX_IOBASE + 0x1DA4))
-#define PSXREG_SPU_TSA    (*(volatile uint16_t *)(PSX_IOBASE + 0x1DA6))
-#define PSXREG_SPU_FIFO   (*(volatile uint16_t *)(PSX_IOBASE + 0x1DA8))
-#define PSXREG_SPU_CNT    (*(volatile uint16_t *)(PSX_IOBASE + 0x1DAA))
-#define PSXREG_SPU_TRNCTL (*(volatile uint16_t *)(PSX_IOBASE + 0x1DAC))
+#define PSXREG_SPU_IRQ_ADDR (*(volatile uint16_t *)(PSX_IOBASE + 0x1DA4))
+#define PSXREG_SPU_MEM_ADDR    (*(volatile uint16_t *)(PSX_IOBASE + 0x1DA6))
+#define PSXREG_SPU_MEM_FIFO   (*(volatile uint16_t *)(PSX_IOBASE + 0x1DA8))
+#define PSXREG_SPU_CTRL    (*(volatile uint16_t *)(PSX_IOBASE + 0x1DAA))
+#define PSXREG_SPU_MEM_CTRL (*(volatile uint16_t *)(PSX_IOBASE + 0x1DAC))
 #define PSXREG_SPU_STAT   (*(volatile uint16_t *)(PSX_IOBASE + 0x1DAE))
-#define PSXREG_SPU_CDVOL  (*(volatile uint32_t *)(PSX_IOBASE + 0x1DB0))
-#define PSXREG_SPU_CDVOLL (*(volatile uint16_t *)(PSX_IOBASE + 0x1DB0))
-#define PSXREG_SPU_CDVOLR (*(volatile uint16_t *)(PSX_IOBASE + 0x1DB2))
-#define PSXREG_SPU_XVOL   (*(volatile uint32_t *)(PSX_IOBASE + 0x1DB4))
-#define PSXREG_SPU_XVOLL  (*(volatile uint16_t *)(PSX_IOBASE + 0x1DB4))
-#define PSXREG_SPU_XVOLR  (*(volatile uint16_t *)(PSX_IOBASE + 0x1DB6))
-#define PSXREG_SPU_MVOLX  (*(volatile uint32_t *)(PSX_IOBASE + 0x1DB8))
-#define PSXREG_SPU_MVOLXL (*(volatile uint16_t *)(PSX_IOBASE + 0x1DB8))
-#define PSXREG_SPU_MVOLXR (*(volatile uint16_t *)(PSX_IOBASE + 0x1DBA))
+#define PSXREG_SPU_CD_VOL  (*(volatile uint32_t *)(PSX_IOBASE + 0x1DB0))
+#define PSXREG_SPU_CD_VOLL (*(volatile uint16_t *)(PSX_IOBASE + 0x1DB0))
+#define PSXREG_SPU_CD_VOLR (*(volatile uint16_t *)(PSX_IOBASE + 0x1DB2))
+#define PSXREG_SPU_EXT_VOL   (*(volatile uint32_t *)(PSX_IOBASE + 0x1DB4))
+#define PSXREG_SPU_EXT_VOLL  (*(volatile uint16_t *)(PSX_IOBASE + 0x1DB4))
+#define PSXREG_SPU_EXT_VOLR  (*(volatile uint16_t *)(PSX_IOBASE + 0x1DB6))
+#define PSXREG_SPU_CURR_VOL  (*(volatile uint32_t *)(PSX_IOBASE + 0x1DB8))
+#define PSXREG_SPU_CURR_VOLL (*(volatile uint16_t *)(PSX_IOBASE + 0x1DB8))
+#define PSXREG_SPU_CURR_VOLR (*(volatile uint16_t *)(PSX_IOBASE + 0x1DBA))
 // 0x1DBC 32-bit unknown
 
-#define PSXREG_SPU_EFFECT_dAPF1   (*(volatile uint16_t *)(PSX_IOBASE + 0x1DC0))
-#define PSXREG_SPU_EFFECT_dAPF2   (*(volatile uint16_t *)(PSX_IOBASE + 0x1DC2))
+#define PSXREG_SPU_EFFECT_vOUT       (*(volatile uint32_t *)(PSX_IOBASE + 0x1D84))
+#define PSXREG_SPU_EFFECT_vLOUT      (*(volatile uint16_t *)(PSX_IOBASE + 0x1D84))
+#define PSXREG_SPU_EFFECT_vROUT      (*(volatile uint16_t *)(PSX_IOBASE + 0x1D86))
+#define PSXREG_SPU_EFFECT_mBASE      (*(volatile uint16_t *)(PSX_IOBASE + 0x1DA2))
+#define PSXREG_SPU_EFFECT_dAPF1      (*(volatile uint16_t *)(PSX_IOBASE + 0x1DC0))
+#define PSXREG_SPU_EFFECT_dAPF2      (*(volatile uint16_t *)(PSX_IOBASE + 0x1DC2))
 #define PSXREG_SPU_EFFECT_vIIR    (*(volatile uint16_t *)(PSX_IOBASE + 0x1DC4))
 #define PSXREG_SPU_EFFECT_vCOMB1  (*(volatile uint16_t *)(PSX_IOBASE + 0x1DC6))
 #define PSXREG_SPU_EFFECT_vCOMB2  (*(volatile uint16_t *)(PSX_IOBASE + 0x1DC8))
@@ -219,7 +212,6 @@ freely, subject to the following restrictions:
 #define PSXREG_SPU_EFFECT_dLDIFF   (*(volatile uint16_t *)(PSX_IOBASE + 0x1DF0))
 #define PSXREG_SPU_EFFECT_mLAPF1   (*(volatile uint16_t *)(PSX_IOBASE + 0x1DF4))
 #define PSXREG_SPU_EFFECT_mLAPF2   (*(volatile uint16_t *)(PSX_IOBASE + 0x1DF8))
-#define PSXREG_SPU_EFFECT_vLIN     (*(volatile uint16_t *)(PSX_IOBASE + 0x1DFC))
 #define PSXREG_SPU_EFFECT_mRSAME   (*(volatile uint16_t *)(PSX_IOBASE + 0x1DD6))
 #define PSXREG_SPU_EFFECT_mRCOMB1  (*(volatile uint16_t *)(PSX_IOBASE + 0x1DDA))
 #define PSXREG_SPU_EFFECT_mRCOMB2  (*(volatile uint16_t *)(PSX_IOBASE + 0x1DDE))
@@ -230,8 +222,7 @@ freely, subject to the following restrictions:
 #define PSXREG_SPU_EFFECT_dRDIFF   (*(volatile uint16_t *)(PSX_IOBASE + 0x1DF2))
 #define PSXREG_SPU_EFFECT_mRAPF1   (*(volatile uint16_t *)(PSX_IOBASE + 0x1DF6))
 #define PSXREG_SPU_EFFECT_mRAPF2   (*(volatile uint16_t *)(PSX_IOBASE + 0x1DFA))
+#define PSXREG_SPU_EFFECT_vLIN     (*(volatile uint16_t *)(PSX_IOBASE + 0x1DFC))
 #define PSXREG_SPU_EFFECT_vRIN     (*(volatile uint16_t *)(PSX_IOBASE + 0x1DFE))
 
-
-#define PSXREG_SPU_n_VOLX(n) (*(volatile uint32_t *)(PSX_IOBASE + 0x1E00 + (n)*0x04))
-
+#define PSXREG_SPU_n_CURR_VOL(n) (*(volatile uint32_t *)(PSX_IOBASE + 0x1E00 + (n)*0x04))

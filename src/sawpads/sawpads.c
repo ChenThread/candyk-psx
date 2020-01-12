@@ -29,9 +29,7 @@ freely, subject to the following restrictions:
 #include <stdio.h>
 #include <errno.h>
 
-#include <psxdefs/intc.h>
-#include <psxdefs/joy.h>
-#include <psxregs.h>
+#include <psxdefs.h>
 #include <sawpads.h>
 
 volatile sawpads_controller_t sawpads_controller[2];

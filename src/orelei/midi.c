@@ -29,10 +29,7 @@ freely, subject to the following restrictions:
 #include <stdio.h>
 #include <errno.h>
 
-#include <psxdefs/intc.h>
-#include <psxdefs/spu.h>
-#include <psxregs.h>
-
+#include <psxdefs.h>
 #include <orelei.h>
 
 #define ASSERT(x) if (!(x)) { for(;;) {} }
