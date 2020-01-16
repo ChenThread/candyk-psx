@@ -20,7 +20,6 @@ Toolchain examples are licensed under the Creative Commons Zero license - feel a
 ```
 [candyk]
 Server = http://candyk.asie.pl/repo/x86_64
-downloads.devkitpro.org/packages
 ```
 
 3. `pacman -Syu`
