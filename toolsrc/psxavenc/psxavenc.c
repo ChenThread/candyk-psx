@@ -30,16 +30,19 @@ void print_help(void) {
 	fprintf(stderr, "                       xa     [A.] .xa 2336-byte sectors\n");
 	fprintf(stderr, "                       xacd   [A.] .xa 2352-byte sectors\n");
 	fprintf(stderr, "                       spu    [A.] raw SPU-ADPCM data\n");
-	fprintf(stderr, "                       str2   [AV] v2 .str video 2352-byte sectors\n");
+	fprintf(stderr, "                       str2   [AV] v2 .str video 2336-byte sectors\n");
+	fprintf(stderr, "                       str2cd [AV] v2 .str video 2352-byte sectors\n");
 	fprintf(stderr, "    -b bitdepth      Use specified bit depth (only 4 bits supported)\n");
 	fprintf(stderr, "    -c channels      Use specified channel count (1 or 2)\n");
-	fprintf(stderr, "    -F num           [.xa] Set the file number to num (0-255)\n");
-	fprintf(stderr, "    -C num           [.xa] Set the channel number to num (0-31)\n");
+	fprintf(stderr, "    -F num           Set the XA file number to num (0-255)\n");
+	fprintf(stderr, "    -C num           Set the XA channel number to num (0-31)\n");
+	fprintf(stderr, "    -W width         [.str] Rescale input file to the specified width (default 320)\n");
+	fprintf(stderr, "    -H height        [.str] Rescale input file to the specified height (default 240)\n");
 }
 
 int parse_args(settings_t* settings, int argc, char** argv) {
 	int c;
-	while ((c = getopt(argc, argv, "t:f:b:c:F:C:")) != -1) {
+	while ((c = getopt(argc, argv, "t:f:b:c:F:C:W:H:h?")) != -1) {
 		switch (c) {
 			case 't': {
 				if (strcmp(optarg, "xa") == 0) {
@@ -50,6 +53,8 @@ int parse_args(settings_t* settings, int argc, char** argv) {
 					settings->format = FORMAT_SPU;
 				} else if (strcmp(optarg, "str2") == 0) {
 					settings->format = FORMAT_STR2;
+				} else if (strcmp(optarg, "str2cd") == 0) {
+					settings->format = FORMAT_STR2CD;
 				} else {
 					fprintf(stderr, "Invalid format: %s\n", optarg);
 					return -1;
@@ -87,6 +92,20 @@ int parse_args(settings_t* settings, int argc, char** argv) {
 					return -1;
 				}
 			} break;
+			case 'W': {
+				settings->video_width = (atoi(optarg) + 15) & ~15;
+				if (settings->video_width < 16 || settings->video_width > 640) {
+					fprintf(stderr, "Invalid video width: %d\n", settings->video_width);
+					return -1;
+				}
+			} break;
+			case 'H': {
+				settings->video_height = (atoi(optarg) + 15) & ~15;
+				if (settings->video_height < 16 || settings->video_height > 480) {
+					fprintf(stderr, "Invalid video height: %d\n", settings->video_height);
+					return -1;
+				}
+			} break;
 			case '?':
 			case 'h': {
 				print_help();
@@ -95,7 +114,7 @@ int parse_args(settings_t* settings, int argc, char** argv) {
 		}
 	}
 
-	if (settings->format == FORMAT_XA || settings->format == FORMAT_XACD) {
+	if (settings->format != FORMAT_SPU) {
 		if (settings->frequency != PSX_AUDIO_XA_FREQ_SINGLE && settings->frequency != PSX_AUDIO_XA_FREQ_DOUBLE) {
 			fprintf(stderr, "Invalid frequency: %d Hz\n", settings->frequency);
 			return -1;
@@ -177,6 +196,7 @@ int main(int argc, char **argv) {
 			encode_file_spu(settings.audio_samples, settings.audio_sample_count / av_sample_mul, &settings, output);
 			break;
 		case FORMAT_STR2:
+		case FORMAT_STR2CD:
 			encode_file_str(&settings, output);
 			break;
 	}

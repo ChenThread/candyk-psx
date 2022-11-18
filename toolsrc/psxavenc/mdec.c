@@ -370,7 +370,7 @@ static void encode_dct_block(vid_encoder_state_t *state, int32_t *block)
 	encode_bits(state, 2, 0x2);
 	state->uncomp_hwords_used += 2;
 
-	state->uncomp_hwords_used = (state->uncomp_hwords_used+0xF)&~0xF;
+	//state->uncomp_hwords_used = (state->uncomp_hwords_used+0xF)&~0xF;
 }
 
 static int reduce_dct_block(vid_encoder_state_t *state, int32_t *block, int32_t min_val, int *values_to_shed)
@@ -550,11 +550,18 @@ static void encode_frame_str(uint8_t *video_frames, int video_frame_count, uint8
 	encode_bits(&(settings->state_vid), 10, 0x1FF);
 	encode_bits(&(settings->state_vid), 2, 0x2);
 	settings->state_vid.uncomp_hwords_used += 2;
-	settings->state_vid.uncomp_hwords_used = (settings->state_vid.uncomp_hwords_used+0xF)&~0xF;
+
+	// MDEC DMA is usually configured to transfer data in 32-word chunks.
+	settings->state_vid.uncomp_hwords_used = (settings->state_vid.uncomp_hwords_used+0x3F)&~0x3F;
 
 	flush_bits(&(settings->state_vid));
 
-	settings->state_vid.blocks_used = ((settings->state_vid.uncomp_hwords_used+0xF)&~0xF)>>4;
+	// This is not the number of 32-byte blocks required for uncompressed data
+	// as jPSXdec docs say, but rather the number of 32-*bit* words required.
+	// The first 4 bytes of the frame header are in fact the MDEC command to
+	// start decoding, which contains the data length in words in the lower 16
+	// bits.
+	settings->state_vid.blocks_used = (settings->state_vid.uncomp_hwords_used+1)>>1;
 
 	// We need a multiple of 4
 	settings->state_vid.bytes_used = (settings->state_vid.bytes_used+0x3)&~0x3;
@@ -636,8 +643,13 @@ void encode_block_str(uint8_t *video_frames, int video_frame_count, uint8_t *out
 		header[0x00E] = (uint8_t)(settings->state_vid.bytes_used>>16);
 		header[0x00F] = (uint8_t)(settings->state_vid.bytes_used>>24);
 
-		memcpy(output + 2352*i + 0x018, header, sizeof(header));
-		memcpy(output + 2352*i + 0x018 + 0x020, settings->state_vid.unmuxed + 2016*settings->state_vid.frame_block_index, 2016);
+		if (settings->format == FORMAT_STR2CD) {
+			memcpy(output + 2352*i + 0x018, header, sizeof(header));
+			memcpy(output + 2352*i + 0x018 + 0x020, settings->state_vid.unmuxed + 2016*settings->state_vid.frame_block_index, 2016);
+		} else {
+			memcpy(output + 2336*i + 0x008, header, sizeof(header));
+			memcpy(output + 2336*i + 0x008 + 0x020, settings->state_vid.unmuxed + 2016*settings->state_vid.frame_block_index, 2016);
+		}
 
 		settings->state_vid.frame_block_index++;
 	}

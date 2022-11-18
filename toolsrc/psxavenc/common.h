@@ -40,6 +40,7 @@ freely, subject to the following restrictions:
 #define FORMAT_XACD 1
 #define FORMAT_SPU 2
 #define FORMAT_STR2 3
+#define FORMAT_STR2CD 4
 
 #define MAX_UNMUXED_BLOCKS 9
 typedef struct {

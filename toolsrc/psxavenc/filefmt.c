@@ -34,6 +34,7 @@ static psx_audio_xa_settings_t settings_to_libpsxav_xa_audio(settings_t *setting
 
 	switch (settings->format) {
 		case FORMAT_XA:
+		case FORMAT_STR2:
 			new_settings.format = PSX_AUDIO_XA_FORMAT_XA;
 			break;
 		default:
@@ -87,7 +88,8 @@ void encode_file_xa(int16_t *audio_samples, int audio_sample_count, settings_t *
 void encode_file_str(settings_t *settings, FILE *output) {
 	uint8_t buffer[2352*8];
 	psx_audio_xa_settings_t xa_settings = settings_to_libpsxav_xa_audio(settings);
-	psx_audio_encoder_state_t audio_state;	
+	psx_audio_encoder_state_t audio_state;
+	int sector_size = psx_audio_xa_get_buffer_size_per_sector(xa_settings);
 	int audio_samples_per_sector = psx_audio_xa_get_samples_per_sector(xa_settings);
 	int av_sample_mul = settings->stereo ? 2 : 1;
 
@@ -111,26 +113,32 @@ void encode_file_str(settings_t *settings, FILE *output) {
 	// FIXME: this needs an extra frame to prevent A/V desync
 	const int frames_needed = 2;
 	for (int j = 0; ensure_av_data(settings, audio_samples_per_sector*av_sample_mul*frames_needed, 1*frames_needed); j+=18) {
-		psx_audio_xa_encode(xa_settings, &audio_state, settings->audio_samples, audio_samples_per_sector, buffer + 2352 * 7);
+		psx_audio_xa_encode(xa_settings, &audio_state, settings->audio_samples, audio_samples_per_sector, buffer + sector_size * 7);
 		
 		// TODO: the final buffer
 		for(int k = 0; k < 7; k++) {
-			init_sector_buffer_video(buffer + 2352*k, settings);
+			init_sector_buffer_video(buffer + sector_size*k, settings);
 		}
 		encode_block_str(settings->video_frames, settings->video_frame_count, buffer, settings);
-		for(int k = 0; k < 8; k++) {
-			int t = k + (j/18)*8 + 75*2;
 
-			// Put the time in
-			buffer[0x00C + 2352*k] = ((t/75/60)%10)|(((t/75/60)/10)<<4);
-			buffer[0x00D + 2352*k] = (((t/75)%60)%10)|((((t/75)%60)/10)<<4);
-			buffer[0x00E + 2352*k] = ((t%75)%10)|(((t%75)/10)<<4);
+		if (settings->format == FORMAT_STR2CD) {
+			for(int k = 0; k < 8; k++) {
+				int t = k + (j/18)*8 + 75*2;
 
-			if(k != 7) {
-				calculate_edc_data(buffer + 2352*k);
+				// Put the time in
+				buffer[0x00C + 2352*k] = ((t/75/60)%10)|(((t/75/60)/10)<<4);
+				buffer[0x00D + 2352*k] = (((t/75)%60)%10)|((((t/75)%60)/10)<<4);
+				buffer[0x00E + 2352*k] = ((t%75)%10)|(((t%75)/10)<<4);
+
+				// FIXME: EDC is not calculated in 2336-byte sector mode
+				// (shouldn't matter anyway, any CD image builder will
+				// have to recalculate it due to the sector's MSF changing)
+				if(k != 7) {
+					calculate_edc_data(buffer + 2352*k);
+				}
 			}
 		}
 		retire_av_data(settings, audio_samples_per_sector*av_sample_mul, 0);
-		fwrite(buffer, 2352*8, 1, output);
+		fwrite(buffer, sector_size*8, 1, output);
 	}
 }
