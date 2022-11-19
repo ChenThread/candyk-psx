@@ -135,9 +135,9 @@ bool open_av_data(const char *filename, settings_t *settings)
 	av_opt_set_int(av->resampler, "in_sample_rate", av->audio_codec_context->sample_rate, 0);
 	av_opt_set_sample_fmt(av->resampler, "in_sample_fmt", av->audio_codec_context->sample_fmt, 0);
 
-	av->sample_count_mul = settings->stereo ? 2 : 1;
-	av_opt_set_int(av->resampler, "out_channel_count", settings->stereo ? 2 : 1, 0);
-	av_opt_set_int(av->resampler, "out_channel_layout", settings->stereo ? AV_CH_LAYOUT_STEREO : AV_CH_LAYOUT_MONO, 0);
+	av->sample_count_mul = settings->channels;
+	av_opt_set_int(av->resampler, "out_channel_count", settings->channels, 0);
+	//av_opt_set_int(av->resampler, "out_channel_layout", (settings->channels == 2) ? AV_CH_LAYOUT_STEREO : AV_CH_LAYOUT_MONO, 0);
 	av_opt_set_int(av->resampler, "out_sample_rate", settings->frequency, 0);
 	av_opt_set_sample_fmt(av->resampler, "out_sample_fmt", AV_SAMPLE_FMT_S16, 0);
 
@@ -244,7 +244,7 @@ static void poll_av_packet_video(settings_t *settings, AVPacket *packet)
 		uint8_t *dst_pointers[1] = {
 			(settings->video_frames) + av->video_frame_dst_size*(settings->video_frame_count),
 		};
-		sws_scale(av->scaler, av->frame->data, av->frame->linesize, 0, av->frame->height, dst_pointers, dst_strides);
+		sws_scale(av->scaler, (const uint8_t *const *) av->frame->data, av->frame->linesize, 0, av->frame->height, dst_pointers, dst_strides);
 
 		settings->video_frame_count += 1;
 		//free(buffer[0]);
@@ -304,8 +304,7 @@ void pull_all_av_data(settings_t *settings)
 		// do nothing
 	}
 
-	fprintf(stderr, "Loaded %d samples.\n", settings->audio_sample_count);
-	fprintf(stderr, "Loaded %d frames.\n", settings->video_frame_count);
+	fprintf(stderr, "Loaded %d audio samples, %d video frames.\n", settings->audio_sample_count, settings->video_frame_count);
 }
 
 void retire_av_data(settings_t *settings, int retired_audio_samples, int retired_video_frames)

@@ -284,13 +284,13 @@ int psx_audio_xa_encode_simple(psx_audio_xa_settings_t settings, int16_t* sample
 	return length;
 }
 
-int psx_audio_spu_encode(psx_audio_encoder_state_t *state, int16_t* samples, int sample_count, uint8_t *output) {
+int psx_audio_spu_encode(psx_audio_encoder_channel_state_t *state, int16_t* samples, int sample_count, int pitch, uint8_t *output) {
 	uint8_t prebuf[28];
 	uint8_t *buffer = output;
 	uint8_t *data;
 
 	for (int i = 0; i < sample_count; i += 28, buffer += 16) {
-		buffer[0] = encode_nibbles(&(state->left), samples + i, sample_count - i, 1, prebuf, 0, 1, SPU_ADPCM_FILTER_COUNT);
+		buffer[0] = encode_nibbles(state, samples + i * pitch, sample_count - i, pitch, prebuf, 0, 1, SPU_ADPCM_FILTER_COUNT);
 		buffer[1] = 0;
 
 		for (int j = 0; j < 28; j+=2) {
@@ -302,20 +302,22 @@ int psx_audio_spu_encode(psx_audio_encoder_state_t *state, int16_t* samples, int
 }
 
 int psx_audio_spu_encode_simple(int16_t* samples, int sample_count, uint8_t *output, int loop_start) {
-	psx_audio_encoder_state_t state;
-	memset(&state, 0, sizeof(psx_audio_encoder_state_t));
-	int length = psx_audio_spu_encode(&state, samples, sample_count, output);
+	psx_audio_encoder_channel_state_t state;
+	memset(&state, 0, sizeof(psx_audio_encoder_channel_state_t));
+	int length = psx_audio_spu_encode(&state, samples, sample_count, 1, output);
 
 	if (length >= 32) {
 		if (loop_start < 0) {
-			output[1] = 4;
-			output[length - 16 + 1] = 1;
+			//output[1] = PSX_AUDIO_SPU_LOOP_START;
+			output[length - 16 + 1] = PSX_AUDIO_SPU_LOOP_END;
 		} else {
-			psx_audio_spu_set_flag_at_sample(output, loop_start, 4);
-			output[length - 16 + 1] = 3;
+			psx_audio_spu_set_flag_at_sample(output, loop_start, PSX_AUDIO_SPU_LOOP_START);
+			output[length - 16 + 1] = PSX_AUDIO_SPU_LOOP_REPEAT;
 		}
 	} else if (length >= 16) {
-		output[1] = loop_start >= 0 ? 7 : 5;
+		output[1] = PSX_AUDIO_SPU_LOOP_START | PSX_AUDIO_SPU_LOOP_END;
+		if (loop_start >= 0)
+			output[1] |= PSX_AUDIO_SPU_LOOP_REPEAT;
 	}
 
 	return length;
