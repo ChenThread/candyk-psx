@@ -35,6 +35,7 @@ void print_help(void) {
 	fprintf(stderr, "                       xa     [A.] .xa 2336-byte sectors\n");
 	fprintf(stderr, "                       xacd   [A.] .xa 2352-byte sectors\n");
 	fprintf(stderr, "                       spu    [A.] raw SPU-ADPCM mono data\n");
+	fprintf(stderr, "                       spui   [A.] raw SPU-ADPCM interleaved data\n");
 	fprintf(stderr, "                       vag    [A.] .vag SPU-ADPCM mono\n");
 	fprintf(stderr, "                       vagi   [A.] .vag SPU-ADPCM interleaved\n");
 	fprintf(stderr, "                       str2   [AV] v2 .str video 2336-byte sectors\n");
@@ -44,14 +45,15 @@ void print_help(void) {
 	fprintf(stderr, "    -F num           Set the XA file number to num (0-255)\n");
 	fprintf(stderr, "    -C num           Set the XA channel number to num (0-31)\n");
 	fprintf(stderr, "    -L               Add a loop marker at the end of SPU-ADPCM data\n");
-	fprintf(stderr, "    -W width         [.str] Rescale input file to the specified width (default 320)\n");
-	fprintf(stderr, "    -H height        [.str] Rescale input file to the specified height (default 240)\n");
-	fprintf(stderr, "    -I size          [.vag] Use specified interleave\n");
+	fprintf(stderr, "    -W width         [str2] Rescale input file to the specified width (default 320)\n");
+	fprintf(stderr, "    -H height        [str2] Rescale input file to the specified height (default 240)\n");
+	fprintf(stderr, "    -I size          [spui/vagi] Use specified interleave\n");
+	fprintf(stderr, "    -A size          [spui/vagi] Pad header and each interleaved chunk to specified size\n");
 }
 
 int parse_args(settings_t* settings, int argc, char** argv) {
 	int c;
-	while ((c = getopt(argc, argv, "t:f:b:c:F:C:W:H:I:Lh?")) != -1) {
+	while ((c = getopt(argc, argv, "t:f:b:c:F:C:W:H:I:A:Lh?")) != -1) {
 		switch (c) {
 			case 't': {
 				if (strcmp(optarg, "xa") == 0) {
@@ -60,6 +62,8 @@ int parse_args(settings_t* settings, int argc, char** argv) {
 					settings->format = FORMAT_XACD;
 				} else if (strcmp(optarg, "spu") == 0) {
 					settings->format = FORMAT_SPU;
+				} else if (strcmp(optarg, "spui") == 0) {
+					settings->format = FORMAT_SPUI;
 				} else if (strcmp(optarg, "vag") == 0) {
 					settings->format = FORMAT_VAG;
 				} else if (strcmp(optarg, "vagi") == 0) {
@@ -129,6 +133,13 @@ int parse_args(settings_t* settings, int argc, char** argv) {
 					return -1;
 				}
 			} break;
+			case 'A': {
+				settings->alignment = strtol(optarg, NULL, 0);
+				if (settings->alignment < 1) {
+					fprintf(stderr, "Invalid alignment: %d\n", settings->alignment);
+					return -1;
+				}
+			} break;
 			case '?':
 			case 'h': {
 				print_help();
@@ -174,6 +185,7 @@ int parse_args(settings_t* settings, int argc, char** argv) {
 				return -1;
 			}
 			break;
+		case FORMAT_SPUI:
 		case FORMAT_VAGI:
 			if (settings->bits_per_sample != 4) {
 				fprintf(stderr, "Invalid SPU-ADPCM bit depth: %d (must be 4)\n", settings->bits_per_sample);
@@ -206,6 +218,7 @@ int main(int argc, char **argv) {
 	settings.frequency = PSX_AUDIO_XA_FREQ_DOUBLE;
 	settings.bits_per_sample = 4;
 	settings.interleave = 0;
+	settings.alignment = 2048;
 	settings.loop = false;
 
 	settings.video_width = 320;
@@ -266,6 +279,7 @@ int main(int argc, char **argv) {
 			pull_all_av_data(&settings);
 			encode_file_spu(settings.audio_samples, settings.audio_sample_count / settings.channels, &settings, output);
 			break;
+		case FORMAT_SPUI:
 		case FORMAT_VAGI:
 			pull_all_av_data(&settings);
 			encode_file_spu_interleaved(settings.audio_samples, settings.audio_sample_count / settings.channels, &settings, output);

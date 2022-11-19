@@ -39,10 +39,11 @@ freely, subject to the following restrictions:
 #define FORMAT_XA 0
 #define FORMAT_XACD 1
 #define FORMAT_SPU 2
-#define FORMAT_VAG 3
-#define FORMAT_VAGI 4
-#define FORMAT_STR2 5
-#define FORMAT_STR2CD 6
+#define FORMAT_SPUI 3
+#define FORMAT_VAG 4
+#define FORMAT_VAGI 5
+#define FORMAT_STR2 6
+#define FORMAT_STR2CD 7
 
 #define MAX_UNMUXED_BLOCKS 9
 typedef struct {
@@ -91,6 +92,7 @@ typedef struct {
 	int file_number; // 00-FF
 	int channel_number; // 00-1F
 	int interleave;
+	int alignment;
 	bool loop;
 
 	int video_width;

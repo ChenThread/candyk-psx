@@ -116,20 +116,27 @@ void encode_file_spu(int16_t *audio_samples, int audio_sample_count, settings_t 
 
 void encode_file_spu_interleaved(int16_t *audio_samples, int audio_sample_count, settings_t *settings, FILE *output) {
 	int audio_state_size = sizeof(psx_audio_encoder_channel_state_t) * settings->channels;
-	int buffer_size = (settings->interleave + 2047) & ~2047;
+	// Note that some tools (*cough* vgmstream *cough*) will not properly play
+	// .VAG files with interleave < 2048 and/or alignment != 2048.
+	int buffer_size = settings->interleave + settings->alignment - 1;
+	buffer_size -= buffer_size % settings->alignment;
+	int header_size = 48 + settings->alignment - 1;
+	header_size -= header_size % settings->alignment;
+
 	psx_audio_encoder_channel_state_t *audio_state = malloc(audio_state_size);
 	uint8_t *buffer = malloc(buffer_size);
 	int audio_samples_per_block = psx_audio_spu_get_samples_per_block();
 	int block_count = (audio_sample_count + audio_samples_per_block - 1) / audio_samples_per_block;
-	int audio_samples_per_chunk = (settings->interleave + 15) / 16 * audio_samples_per_block;
+	int audio_samples_per_chunk = settings->interleave / psx_audio_spu_get_buffer_size_per_block() * audio_samples_per_block;
 
 	memset(audio_state, 0, audio_state_size);
 
 	if (settings->format == FORMAT_VAGI) {
-		uint8_t header[2048];
-		memset(header, 0, 2048);
+		uint8_t *header = malloc(header_size);
+		memset(header, 0, header_size);
 		write_vag_header(block_count * 16, header, settings);
-		fwrite(header, 2048, 1, output);
+		fwrite(header, header_size, 1, output);
+		free(header);
 	}
 
 	for (int i = 0; i < audio_sample_count; i += audio_samples_per_chunk) {
@@ -138,13 +145,15 @@ void encode_file_spu_interleaved(int16_t *audio_samples, int audio_sample_count,
 
 		for (int ch = 0; ch < settings->channels; ch++) {
 			memset(buffer, 0, buffer_size);
-			int length = psx_audio_spu_encode(audio_state + ch, audio_samples + i * settings->channels + ch, samples_length, settings->channels, buffer);
-			// The SPU already resets the loop address when starting playback of a sample
-			//buffer[1] = PSX_AUDIO_SPU_LOOP_START;
-			if (settings->loop) {
-				buffer[length - 16 + 1] = PSX_AUDIO_SPU_LOOP_REPEAT;
-			} else if ((i + audio_samples_per_chunk) >= audio_sample_count) {
-				buffer[length - 16 + 1] = PSX_AUDIO_SPU_LOOP_END;
+			int length = psx_audio_spu_encode(audio_state + ch, audio_samples + (i * settings->channels) + ch, samples_length, settings->channels, buffer);
+			if (length) {
+				// The SPU already resets the loop address when starting playback of a sample
+				//buffer[1] = PSX_AUDIO_SPU_LOOP_START;
+				if (settings->loop) {
+					buffer[length - 16 + 1] = PSX_AUDIO_SPU_LOOP_REPEAT;
+				} else if ((i + audio_samples_per_chunk) >= audio_sample_count) {
+					buffer[length - 16 + 1] = PSX_AUDIO_SPU_LOOP_END;
+				}
 			}
 			fwrite(buffer, buffer_size, 1, output);
 		}
