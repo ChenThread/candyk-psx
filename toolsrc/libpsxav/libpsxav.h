@@ -67,6 +67,7 @@ uint32_t psx_audio_xa_get_buffer_size_per_sector(psx_audio_xa_settings_t setting
 uint32_t psx_audio_spu_get_buffer_size_per_block(void);
 uint32_t psx_audio_xa_get_samples_per_sector(psx_audio_xa_settings_t settings);
 uint32_t psx_audio_spu_get_samples_per_block(void);
+uint32_t psx_audio_xa_get_sector_interleave(psx_audio_xa_settings_t settings);
 int psx_audio_xa_encode(psx_audio_xa_settings_t settings, psx_audio_encoder_state_t *state, int16_t* samples, int sample_count, uint8_t *output);
 int psx_audio_xa_encode_simple(psx_audio_xa_settings_t settings, int16_t* samples, int sample_count, uint8_t *output);
 int psx_audio_spu_encode(psx_audio_encoder_channel_state_t *state, int16_t* samples, int sample_count, int pitch, uint8_t *output);
