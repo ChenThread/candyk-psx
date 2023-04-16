@@ -30,7 +30,12 @@ freely, subject to the following restrictions:
 #include <string.h>
 #include <math.h>
 #include <time.h>
+
+#ifdef _WIN32
+#include <io.h>
+#else
 #include <unistd.h>
+#endif
 
 #include <libavutil/opt.h>
 #include <libavcodec/avcodec.h>

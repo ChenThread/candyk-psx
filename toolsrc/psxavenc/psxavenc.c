@@ -278,7 +278,11 @@ int main(int argc, char **argv) {
 	memset(&settings,0,sizeof(settings_t));
 
 	settings.quiet = false;
+#ifdef _WIN32
+	settings.show_progress = _isatty(_fileno(stderr));
+#else
 	settings.show_progress = isatty(fileno(stderr));
+#endif
 
 	settings.format = -1;
 	settings.file_number = 0;
